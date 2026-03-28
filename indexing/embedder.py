@@ -1,45 +1,73 @@
-"""Dense embedding using sentence-transformers."""
+"""Dense embedding via Privatemode API (qwen3-embedding-4b)."""
 
 from __future__ import annotations
 
 import logging
+import os
+
+import httpx
 
 logger = logging.getLogger(__name__)
 
-# Lazy-loaded model
-_model = None
-_model_name = None
+MODEL = "qwen3-embedding-4b"
+DIMENSIONS = 1024
+BATCH_SIZE = 64  # max texts per API call
+QUERY_INSTRUCT = "Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery: "
+
+_client: httpx.Client | None = None
 
 
-def get_model(model_name: str = "intfloat/multilingual-e5-base"):
-    """Get or lazily load the embedding model."""
-    global _model, _model_name
-    if _model is None or _model_name != model_name:
-        logger.info("Loading embedding model: %s", model_name)
-        from sentence_transformers import SentenceTransformer
-
-        _model = SentenceTransformer(model_name)
-        _model_name = model_name
-        logger.info("Model loaded (dim=%d)", _model.get_sentence_embedding_dimension())
-    return _model
-
-
-def embed_documents(texts: list[str], model_name: str = "intfloat/multilingual-e5-base") -> list[list[float]]:
-    """Embed document texts. Prepends 'passage: ' as required by E5 models."""
-    model = get_model(model_name)
-    prefixed = [f"passage: {t}" for t in texts]
-    embeddings = model.encode(prefixed, show_progress_bar=False, normalize_embeddings=True)
-    return [e.tolist() for e in embeddings]
+def _get_client() -> httpx.Client:
+    global _client
+    if _client is None:
+        base_url = os.environ["LLM_BASE_URL"]
+        api_key = os.environ.get("LLM_API_KEY", "")
+        _client = httpx.Client(
+            base_url=base_url,
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=120,
+        )
+        logger.info("Embedding client initialized: %s model=%s dim=%d", base_url, MODEL, DIMENSIONS)
+    return _client
 
 
-def embed_query(text: str, model_name: str = "intfloat/multilingual-e5-base") -> list[float]:
-    """Embed a query. Prepends 'query: ' as required by E5 models."""
-    model = get_model(model_name)
-    embedding = model.encode(f"query: {text}", show_progress_bar=False, normalize_embeddings=True)
-    return embedding.tolist()
+def _call_embeddings(inputs: list[str]) -> list[list[float]]:
+    """Call the embeddings API. Returns vectors in input order."""
+    client = _get_client()
+    resp = client.post(
+        "/embeddings",
+        json={
+            "model": MODEL,
+            "input": inputs,
+            "dimensions": DIMENSIONS,
+            "encoding_format": "float",
+        },
+    )
+    resp.raise_for_status()
+    data = resp.json()["data"]
+    # Sort by index to guarantee order
+    data.sort(key=lambda d: d["index"])
+    return [d["embedding"] for d in data]
 
 
-def get_embedding_dim(model_name: str = "intfloat/multilingual-e5-base") -> int:
+def embed_documents(texts: list[str]) -> list[list[float]]:
+    """Embed document texts in batches."""
+    all_embeddings = []
+    for i in range(0, len(texts), BATCH_SIZE):
+        batch = texts[i : i + BATCH_SIZE]
+        embeddings = _call_embeddings(batch)
+        all_embeddings.extend(embeddings)
+        if i + BATCH_SIZE < len(texts):
+            logger.debug("Embedded batch %d-%d / %d", i, i + len(batch), len(texts))
+    return all_embeddings
+
+
+def embed_query(text: str) -> list[float]:
+    """Embed a search query with retrieval instruction prefix."""
+    result = _call_embeddings([f"{QUERY_INSTRUCT}{text}"])
+    return result[0]
+
+
+def get_embedding_dim() -> int:
     """Return embedding dimensionality."""
-    model = get_model(model_name)
-    return model.get_sentence_embedding_dimension()
+    return DIMENSIONS

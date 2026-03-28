@@ -85,7 +85,6 @@ def main():
     parser = argparse.ArgumentParser(description="Run indexing pipeline")
     parser.add_argument("--data-dir", default="data", help="Data directory")
     parser.add_argument("--qdrant-url", default="http://localhost:6333", help="Qdrant URL")
-    parser.add_argument("--model", default="intfloat/multilingual-e5-base", help="Embedding model name")
     parser.add_argument("--poll-interval", type=float, default=5.0, help="Seconds between polls for new data")
     parser.add_argument("--once", action="store_true", help="Process available data and exit (don't wait)")
     parser.add_argument("--rebuild", action="store_true", help="Drop collection and reindex everything from scratch")
@@ -111,12 +110,12 @@ def main():
     bm25.load(vocab_path)
 
     # Get embedding dim (loads model on first call)
-    embedding_dim = get_embedding_dim(args.model)
+    embedding_dim = get_embedding_dim()
 
     if args.rebuild:
         logger.info("Rebuild mode: dropping and recreating collection")
         create_collection(client, embedding_dim)
-        index_documents(client, data_dir, bm25, embedding_model=args.model)
+        index_documents(client, data_dir, bm25)
         bm25.save(vocab_path)
         logger.info("Rebuild complete. BM25 vocab: %d tokens", len(bm25.vocab))
         return
@@ -139,7 +138,7 @@ def main():
         new_records = cursor.read_new_lines(filtered_path)
 
         if new_records:
-            indexed = index_records(client, new_records, bm25, store.read_content, args.model)
+            indexed = index_records(client, new_records, bm25, store.read_content)
             cursor.save()
             bm25.save(vocab_path)
             total_indexed += indexed

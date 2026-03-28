@@ -97,10 +97,9 @@ def search_vector(
     query: str,
     limit: int = 50,
     query_filter: models.Filter | None = None,
-    model_name: str = "intfloat/multilingual-e5-base",
 ) -> list[models.ScoredPoint]:
     """Vector-only search using dense embeddings."""
-    query_vec = embed_query(query, model_name=model_name)
+    query_vec = embed_query(query)
     return client.query_points(
         collection_name=COLLECTION_NAME,
         query=query_vec,
@@ -116,10 +115,9 @@ def search_hybrid(
     query: str,
     limit: int = 50,
     query_filter: models.Filter | None = None,
-    model_name: str = "intfloat/multilingual-e5-base",
 ) -> list[models.ScoredPoint]:
     """Hybrid search using Qdrant's built-in RRF prefetch + fusion."""
-    query_vec = embed_query(query, model_name=model_name)
+    query_vec = embed_query(query)
     sparse_indices, sparse_values = bm25.encode_query(query)
 
     prefetch = []
@@ -232,7 +230,6 @@ def search(
     limit: int = 10,
     offset: int = 0,
     group_by: str = "docs",
-    model_name: str = "intfloat/multilingual-e5-base",
 ) -> dict:
     """Execute a search and return formatted results.
 
@@ -252,9 +249,9 @@ def search(
     if mode == "bm25":
         points = search_bm25(client, bm25, query, limit=fetch_limit, query_filter=query_filter)
     elif mode == "vector":
-        points = search_vector(client, query, limit=fetch_limit, query_filter=query_filter, model_name=model_name)
+        points = search_vector(client, query, limit=fetch_limit, query_filter=query_filter)
     else:  # hybrid (default)
-        points = search_hybrid(client, bm25, query, limit=fetch_limit, query_filter=query_filter, model_name=model_name)
+        points = search_hybrid(client, bm25, query, limit=fetch_limit, query_filter=query_filter)
 
     if group_by == "docs":
         results = _deduplicate_to_docs(points, query)

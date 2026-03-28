@@ -58,7 +58,6 @@ def index_records(
     records: list[dict],
     bm25: BM25Encoder,
     content_reader,
-    embedding_model: str = "intfloat/multilingual-e5-base",
 ) -> int:
     """Index a list of records into Qdrant. Returns count of indexed documents.
 
@@ -83,7 +82,7 @@ def index_records(
         if not texts:
             continue
 
-        dense_vectors = embed_documents(texts, model_name=embedding_model)
+        dense_vectors = embed_documents(texts)
         sparse_vectors = [bm25.encode_document(t) for t in texts]
 
         points = []
@@ -153,5 +152,5 @@ def index_documents(
     records = store.load_records(filtered_path)
     logger.info("Indexing %d filtered documents", len(records))
 
-    indexed = index_records(client, records, bm25, store.read_content, embedding_model)
+    indexed = index_records(client, records, bm25, store.read_content)
     logger.info("Indexing complete: %d documents in collection '%s'", indexed, COLLECTION_NAME)
