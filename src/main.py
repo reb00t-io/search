@@ -436,11 +436,14 @@ async def search_endpoint():
     lang = request.args.get("lang", "all")
     source = request.args.get("source", "all")
     mode = request.args.get("mode", "hybrid")
+    group_by = request.args.get("group_by", "docs")
     limit = min(int(request.args.get("limit", "10")), 100)
     offset = int(request.args.get("offset", "0"))
 
     if mode not in ("hybrid", "bm25", "vector"):
         return jsonify({"error": f"Invalid mode: {mode}. Use: hybrid, bm25, vector"}), 400
+    if group_by not in ("docs", "chunks"):
+        return jsonify({"error": f"Invalid group_by: {group_by}. Use: docs, chunks"}), 400
 
     from serving.search import search
     result = search(
@@ -452,6 +455,7 @@ async def search_endpoint():
         source=source if source != "all" else None,
         limit=limit,
         offset=offset,
+        group_by=group_by,
     )
     return jsonify(result)
 

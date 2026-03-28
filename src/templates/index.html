@@ -313,6 +313,10 @@
       <option value="bm25">BM25 only</option>
       <option value="vector">Vector only</option>
     </select>
+    <select class="filter-select" id="filter-groupby">
+      <option value="docs">Group by document</option>
+      <option value="chunks">All chunks</option>
+    </select>
   </div>
 
   <div id="results-container">
@@ -336,6 +340,7 @@
   const langSelect = document.getElementById('filter-lang');
   const sourceSelect = document.getElementById('filter-source');
   const modeSelect = document.getElementById('filter-mode');
+  const groupBySelect = document.getElementById('filter-groupby');
 
   const PAGE_SIZE = 10;
   let currentPage = 0;
@@ -349,6 +354,7 @@
       langSelect.value = params.get('lang') || 'all';
       sourceSelect.value = params.get('source') || 'all';
       modeSelect.value = params.get('mode') || 'hybrid';
+      groupBySelect.value = params.get('group_by') || 'docs';
       currentPage = parseInt(params.get('page') || '0');
       doSearch();
     }
@@ -360,6 +366,7 @@
     if (langSelect.value !== 'all') params.set('lang', langSelect.value);
     if (sourceSelect.value !== 'all') params.set('source', sourceSelect.value);
     if (modeSelect.value !== 'hybrid') params.set('mode', modeSelect.value);
+    if (groupBySelect.value !== 'docs') params.set('group_by', groupBySelect.value);
     if (currentPage > 0) params.set('page', currentPage.toString());
     history.replaceState(null, '', '?' + params.toString());
   }
@@ -377,6 +384,7 @@
       lang: langSelect.value,
       source: sourceSelect.value,
       mode: modeSelect.value,
+      group_by: groupBySelect.value,
       limit: PAGE_SIZE.toString(),
       offset: (currentPage * PAGE_SIZE).toString(),
     });
@@ -424,6 +432,7 @@
           <div class="result-snippet">${renderMarkdownSnippet(escapeHtml(r.snippet))}</div>
           <div class="result-meta">
             <span>Score: ${r.score}</span>
+            ${r.matching_chunks ? `<span>${r.matching_chunks} matching chunk${r.matching_chunks > 1 ? 's' : ''}</span>` : ''}
             ${date ? `<span>${date}</span>` : ''}
           </div>
         </div>
@@ -464,7 +473,7 @@
   });
 
   // Re-search when filters change
-  [langSelect, sourceSelect, modeSelect].forEach(el => {
+  [langSelect, sourceSelect, modeSelect, groupBySelect].forEach(el => {
     el.addEventListener('change', () => {
       if (input.value.trim()) {
         currentPage = 0;

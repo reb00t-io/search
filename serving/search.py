@@ -156,6 +156,72 @@ def search_hybrid(
     ).points
 
 
+def _base_doc_id(doc_id: str) -> str:
+    """Extract base document ID by stripping the chunk index.
+
+    'wiki:de:12345:0' -> 'wiki:de:12345'
+    'arxiv:2301.07041:0' -> 'arxiv:2301.07041'
+
+    Doc IDs have the form source:...:chunk_index. We strip the last
+    segment only if the remaining ID has at least 3 colon-separated parts
+    (source + lang/id + page_id) for wiki, or 2 parts for arxiv.
+    """
+    parts = doc_id.split(":")
+    if len(parts) >= 3 and parts[-1].isdigit():
+        return ":".join(parts[:-1])
+    return doc_id
+
+
+def _deduplicate_to_docs(points: list, query: str) -> list[dict]:
+    """Group chunks by document, return one result per doc.
+
+    For each document, picks the best-scoring chunk as the snippet.
+    Documents with more matching chunks get a score boost (log scale).
+    """
+    import math
+
+    docs: dict[str, dict] = {}  # base_doc_id -> best result so far
+
+    for point in points:
+        payload = point.payload or {}
+        doc_id = payload.get("doc_id", "")
+        base_id = _base_doc_id(doc_id)
+        score = point.score if point.score else 0
+
+        if base_id in docs:
+            docs[base_id]["_chunk_count"] += 1
+            # Keep the chunk with the best score as the snippet
+            if score > docs[base_id]["_best_score"]:
+                docs[base_id]["snippet"] = _extract_snippet(payload.get("text", ""), query)
+                docs[base_id]["_best_score"] = score
+        else:
+            docs[base_id] = {
+                "id": base_id,
+                "title": payload.get("title", ""),
+                "url": payload.get("url", ""),
+                "snippet": _extract_snippet(payload.get("text", ""), query),
+                "language": payload.get("language", ""),
+                "source": payload.get("source", ""),
+                "score": score,
+                "timestamp": payload.get("timestamp", ""),
+                "_best_score": score,
+                "_chunk_count": 1,
+            }
+
+    # Boost score by number of matching chunks (diminishing returns)
+    results = []
+    for doc in docs.values():
+        chunk_count = doc.pop("_chunk_count")
+        best_score = doc.pop("_best_score")
+        # Score = best_chunk_score * (1 + log(chunk_count)/5)
+        doc["score"] = round(best_score * (1 + math.log(chunk_count) / 5), 4) if best_score else 0
+        doc["matching_chunks"] = chunk_count
+        results.append(doc)
+
+    results.sort(key=lambda r: r["score"], reverse=True)
+    return results
+
+
 def search(
     client: QdrantClient,
     bm25: BM25Encoder,
@@ -165,18 +231,23 @@ def search(
     source: str | None = None,
     limit: int = 10,
     offset: int = 0,
+    group_by: str = "docs",
     model_name: str = "intfloat/multilingual-e5-base",
 ) -> dict:
     """Execute a search and return formatted results.
 
     Args:
         mode: "hybrid", "bm25", or "vector"
+        group_by: "docs" (deduplicated, one per document) or "chunks" (all chunks)
     """
     start = time.time()
     query_filter = _build_filter(lang, source)
 
-    # Fetch more than needed to handle offset
-    fetch_limit = limit + offset
+    # For doc mode, fetch extra to ensure enough unique docs after dedup
+    if group_by == "docs":
+        fetch_limit = (limit + offset) * 5
+    else:
+        fetch_limit = limit + offset
 
     if mode == "bm25":
         points = search_bm25(client, bm25, query, limit=fetch_limit, query_filter=query_filter)
@@ -185,30 +256,34 @@ def search(
     else:  # hybrid (default)
         points = search_hybrid(client, bm25, query, limit=fetch_limit, query_filter=query_filter, model_name=model_name)
 
-    # Apply offset
-    points = points[offset:][:limit]
-
-    results = []
-    for point in points:
-        payload = point.payload or {}
-        text = payload.get("text", "")
-        snippet = _extract_snippet(text, query)
-        results.append({
-            "id": payload.get("doc_id", ""),
-            "title": payload.get("title", ""),
-            "url": payload.get("url", ""),
-            "snippet": snippet,
-            "language": payload.get("language", ""),
-            "source": payload.get("source", ""),
-            "score": round(point.score, 4) if point.score else 0,
-            "timestamp": payload.get("timestamp", ""),
-        })
+    if group_by == "docs":
+        results = _deduplicate_to_docs(points, query)
+        results = results[offset:][:limit]
+    else:
+        # Chunk mode: return all chunks as-is
+        points = points[offset:][:limit]
+        results = []
+        for point in points:
+            payload = point.payload or {}
+            text = payload.get("text", "")
+            snippet = _extract_snippet(text, query)
+            results.append({
+                "id": payload.get("doc_id", ""),
+                "title": payload.get("title", ""),
+                "url": payload.get("url", ""),
+                "snippet": snippet,
+                "language": payload.get("language", ""),
+                "source": payload.get("source", ""),
+                "score": round(point.score, 4) if point.score else 0,
+                "timestamp": payload.get("timestamp", ""),
+            })
 
     took_ms = round((time.time() - start) * 1000)
 
     return {
         "query": query,
         "mode": mode,
+        "group_by": group_by,
         "results": results,
         "total": len(results),
         "took_ms": took_ms,
