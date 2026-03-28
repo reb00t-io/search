@@ -49,6 +49,8 @@ class ContentStore:
             "title": doc.title,
             "url": doc.url,
             "language": doc.language,
+            "content_type": doc.content_type,
+            "full_text_url": doc.full_text_url,
             "content_hash": content_hash,
             "metadata": doc.metadata,
             "timestamp": doc.timestamp,

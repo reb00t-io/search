@@ -98,6 +98,8 @@ def index_records(
                 "title": record["title"],
                 "url": record["url"],
                 "language": record["language"],
+                "content_type": record.get("content_type", "full_text"),
+                "full_text_url": record.get("full_text_url", ""),
                 "text": snippet_text,
                 "timestamp": record["timestamp"],
                 "content_hash": record["content_hash"],

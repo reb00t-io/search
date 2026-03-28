@@ -10,7 +10,7 @@ from collections.abc import Iterator
 
 import httpx
 
-from ingestion.base import Document, SourceAdapter
+from ingestion.base import CONTENT_ABSTRACT, Document, SourceAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +150,8 @@ class ArxivAdapter(SourceAdapter):
                     url=f"https://arxiv.org/abs/{paper['id']}",
                     language="en",
                     text=text,
+                    content_type=CONTENT_ABSTRACT,
+                    full_text_url=f"https://arxiv.org/html/{paper['id']}",
                     metadata={
                         "authors": paper["authors"],
                         "categories": paper["categories"],

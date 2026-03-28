@@ -453,7 +453,9 @@
           <div class="result-snippet">${renderMarkdownSnippet(escapeHtml(r.snippet))}</div>
           <div class="result-meta">
             <span>Score: ${r.score}</span>
-            ${r.matching_chunks ? `<span>${r.matching_chunks} matching chunk${r.matching_chunks > 1 ? 's' : ''}</span>` : ''}
+            ${r.content_type === 'abstract' ? '<span style="color:#f59e0b;">abstract only</span>' : ''}
+            ${r.full_text_url ? `<a href="${escapeHtml(r.full_text_url)}" target="_blank" rel="noopener" style="color:#6366f1;">full text</a>` : ''}
+            ${r.matching_chunks ? `<span>${r.matching_chunks} chunk${r.matching_chunks > 1 ? 's' : ''}</span>` : ''}
             ${date ? `<span>${date}</span>` : ''}
           </div>
         </div>

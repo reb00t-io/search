@@ -10,7 +10,7 @@ from collections.abc import Iterator
 
 import httpx
 
-from ingestion.base import Document, SourceAdapter
+from ingestion.base import CONTENT_ABSTRACT, Document, SourceAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -170,13 +170,16 @@ class RkiAdapter(SourceAdapter):
                     doc_id_slug = re.sub(r"[^a-z0-9]+", "-", title.lower())[:60]
 
                 doc_id = f"rki:{doc_id_slug}:0"
+                ft_url = record["url"] if record["url"] else ""
                 yield Document(
                     id=doc_id,
                     source="rki",
                     title=title,
-                    url=record["url"] or f"https://edoc.rki.de",
+                    url=record["url"] or "https://edoc.rki.de",
                     language=lang,
                     text=text,
+                    content_type=CONTENT_ABSTRACT,
+                    full_text_url=ft_url,
                     metadata={
                         "creators": record["creators"],
                         "subjects": record["subjects"],

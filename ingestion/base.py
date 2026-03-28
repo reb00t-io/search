@@ -6,6 +6,10 @@ import dataclasses
 from collections.abc import Iterator
 from typing import Any
 
+# Content type constants
+CONTENT_ABSTRACT = "abstract"
+CONTENT_FULL_TEXT = "full_text"
+
 
 @dataclasses.dataclass
 class Document:
@@ -17,6 +21,8 @@ class Document:
     url: str
     language: str  # "de" or "en"
     text: str  # markdown content
+    content_type: str = CONTENT_FULL_TEXT  # "abstract" or "full_text"
+    full_text_url: str = ""  # URL to full text (empty if already full text or unavailable)
     metadata: dict[str, Any] = dataclasses.field(default_factory=dict)
     timestamp: str = ""  # ISO 8601
 

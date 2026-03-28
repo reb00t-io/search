@@ -10,7 +10,7 @@ from collections.abc import Iterator
 
 import httpx
 
-from ingestion.base import Document, SourceAdapter
+from ingestion.base import CONTENT_ABSTRACT, Document, SourceAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -219,6 +219,9 @@ class PubmedAdapter(SourceAdapter):
                 if article["doi"]:
                     url = f"https://doi.org/{article['doi']}"
 
+                # Full text URL: prefer PMC if available via DOI, otherwise PubMed page
+                ft_url = f"https://doi.org/{article['doi']}" if article["doi"] else ""
+
                 doc_id = f"pubmed:{article['pmid']}:0"
                 yield Document(
                     id=doc_id,
@@ -227,6 +230,8 @@ class PubmedAdapter(SourceAdapter):
                     url=url,
                     language="en",
                     text=text,
+                    content_type=CONTENT_ABSTRACT,
+                    full_text_url=ft_url,
                     metadata={
                         "authors": article["authors"],
                         "journal": article["journal"],
