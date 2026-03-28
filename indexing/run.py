@@ -63,22 +63,50 @@ def _print_stats(qdrant_url: str, data_dir: Path):
     points = info.points_count or 0
     segments = info.segments_count or 0
 
+    # Count by source and content_type from filtered JSONL
+    import json
+    from collections import Counter
+
+    filtered_path = data_dir / "filtered" / "documents.jsonl"
+    source_counts: Counter = Counter()
+    ct_counts: Counter = Counter()
+    source_ct: Counter = Counter()
+    if filtered_path.exists():
+        for line in filtered_path.read_text().strip().splitlines():
+            if not line.strip():
+                continue
+            try:
+                rec = json.loads(line)
+                src = rec.get("source", "?")
+                ct = rec.get("content_type", "full_text")
+                source_counts[src] += 1
+                ct_counts[ct] += 1
+                source_ct[f"{src}:{ct}"] += 1
+            except json.JSONDecodeError:
+                pass
+
     content_bytes = _dir_size(data_dir / "content")
-    qdrant_bytes = _dir_size(Path.home() / ".local/share/qdrant" / "storage")
-    # Docker volume — try common path
-    if not qdrant_bytes:
-        try:
-            import httpx
-            resp = httpx.get(f"{qdrant_url}/collections/{COLLECTION_NAME}/points/count", timeout=5)
-        except Exception:
-            pass
+    total_bytes = _dir_size(data_dir)
 
     print(f"Documents:     {points}")
+    print(f"  full_text:   {ct_counts.get('full_text', 0)}")
+    print(f"  abstract:    {ct_counts.get('abstract', 0)}")
     print(f"Segments:      {segments}")
     print(f"Content files: {_fmt_bytes(content_bytes)}")
-    # Total local data dir
-    total_bytes = _dir_size(data_dir)
     print(f"Data dir:      {_fmt_bytes(total_bytes)}")
+    print()
+    print("By source:")
+    for src in sorted(source_counts):
+        total = source_counts[src]
+        ft = source_ct.get(f"{src}:full_text", 0)
+        ab = source_ct.get(f"{src}:abstract", 0)
+        parts = []
+        if ft:
+            parts.append(f"{ft} full")
+        if ab:
+            parts.append(f"{ab} abstract")
+        detail = f"  ({', '.join(parts)})" if parts else ""
+        print(f"  {src:<12} {total:>5}{detail}")
 
 
 def main():
