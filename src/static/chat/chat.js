@@ -356,6 +356,24 @@ async function handleToolRequest(toolRequest) {
     };
 }
 
+function showToolStatus(body, toolNames) {
+    let indicator = body.parentElement.querySelector('.tool-status');
+    if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.className = 'tool-status';
+        indicator.style.cssText = 'font-size:0.75rem;color:#6366f1;padding:0.25rem 0;display:flex;align-items:center;gap:0.4rem;';
+        body.parentElement.appendChild(indicator);
+    }
+    const label = toolNames.map(n => n === 'web_search' ? 'Searching' : n === 'fetch_url' ? 'Fetching' : n).join(', ');
+    indicator.innerHTML = `<span style="display:inline-block;width:12px;height:12px;border:2px solid #e2e8f0;border-top-color:#6366f1;border-radius:50%;animation:spin 0.6s linear infinite;"></span> ${label}…`;
+    scrollToBottom();
+}
+
+function hideToolStatus(body) {
+    const indicator = body.parentElement.querySelector('.tool-status');
+    if (indicator) indicator.remove();
+}
+
 async function streamResponse(requestBody, body) {
     let reply = '';
     let sseBuffer = '';
@@ -414,8 +432,14 @@ async function streamResponse(requestBody, body) {
                         continue;
                     }
 
+                    if (message.tool_status) {
+                        showToolStatus(body, message.tool_status.tools || []);
+                        continue;
+                    }
+
                     const delta = message.choices?.[0]?.delta?.content ?? '';
                     if (!delta) continue;
+                    hideToolStatus(body);
                     reply += delta;
                     body.innerHTML = renderMarkdown(reply);
                     scrollToBottom();
@@ -424,6 +448,8 @@ async function streamResponse(requestBody, body) {
                 }
             }
         }
+
+        hideToolStatus(body);
 
         if (!pendingToolResults.length) {
             return reply;

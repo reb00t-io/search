@@ -16,7 +16,7 @@ try:
 except ImportError:
     from tool_executor import execute_tool_call
 
-MAX_TOOL_CALL_ROUNDS = 10
+MAX_TOOL_CALL_ROUNDS = 20
 
 logger = logging.getLogger(__name__)
 
@@ -258,6 +258,8 @@ async def generate_stream(
                 frontend_tool_calls, backend_tool_calls = split_frontend_tool_calls(tool_calls)
 
                 if backend_tool_calls:
+                    tool_names = [((tc.get("function") or {}).get("name", "tool")) for tc in backend_tool_calls]
+                    yield emit_event(json.dumps({"tool_status": {"tools": tool_names, "status": "running"}}, separators=(",", ":")))
                     await execute_backend_tool_round(messages, backend_tool_calls)
 
                 if frontend_tool_calls:
