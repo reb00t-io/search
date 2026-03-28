@@ -17,6 +17,9 @@ dependencies = [
   "quart>=0.20",
   "uvicorn==0.40.0",
   "httpx>=0.28",
+  "mwparserfromhell>=0.6",
+  "qdrant-client>=1.12",
+  "sentence-transformers>=3.0",
 ]
 
 [project.scripts]

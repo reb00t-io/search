@@ -1,4 +1,13 @@
 services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+
   search:
     image: search
     environment:
@@ -6,8 +15,14 @@ services:
       - LLM_BASE_URL=${LLM_BASE_URL}
       - LLM_API_KEY=${LLM_API_KEY}
       - API_KEY=${API_KEY}
+      - QDRANT_URL=http://qdrant:6333
       - SESSIONS_PATH=/data/sessions.json
     ports:
       - "${PORT}:${PORT}"
     volumes:
       - ${HOME}/.bootstrap-template/data:/data
+    depends_on:
+      - qdrant
+
+volumes:
+  qdrant_data:
