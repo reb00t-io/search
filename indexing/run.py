@@ -21,7 +21,7 @@ from qdrant_client import QdrantClient
 
 from indexing.bm25 import BM25Encoder
 from indexing.embedder import get_embedding_dim
-from indexing.indexer import create_collection, ensure_collection, index_documents, index_records
+from indexing.indexer import COLLECTION_NAME, create_collection, ensure_collection, index_documents, index_records
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -35,6 +35,52 @@ def _handle_signal(signum, frame):
     _shutdown = True
 
 
+def _fmt_bytes(b: int) -> str:
+    if b >= 1 << 30:
+        return f"{b / (1 << 30):.2f} GB"
+    if b >= 1 << 20:
+        return f"{b / (1 << 20):.1f} MB"
+    if b >= 1 << 10:
+        return f"{b / (1 << 10):.0f} KB"
+    return f"{b} B"
+
+
+def _dir_size(path: Path) -> int:
+    if not path.exists():
+        return 0
+    return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+
+
+def _print_stats(qdrant_url: str, data_dir: Path):
+    """Print index statistics and exit."""
+    client = QdrantClient(url=qdrant_url)
+    try:
+        info = client.get_collection(COLLECTION_NAME)
+    except Exception:
+        print("Collection not found. Run indexing first.")
+        return
+
+    points = info.points_count or 0
+    segments = info.segments_count or 0
+
+    content_bytes = _dir_size(data_dir / "content")
+    qdrant_bytes = _dir_size(Path.home() / ".local/share/qdrant" / "storage")
+    # Docker volume — try common path
+    if not qdrant_bytes:
+        try:
+            import httpx
+            resp = httpx.get(f"{qdrant_url}/collections/{COLLECTION_NAME}/points/count", timeout=5)
+        except Exception:
+            pass
+
+    print(f"Documents:     {points}")
+    print(f"Segments:      {segments}")
+    print(f"Content files: {_fmt_bytes(content_bytes)}")
+    # Total local data dir
+    total_bytes = _dir_size(data_dir)
+    print(f"Data dir:      {_fmt_bytes(total_bytes)}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Run indexing pipeline")
     parser.add_argument("--data-dir", default="data", help="Data directory")
@@ -43,7 +89,12 @@ def main():
     parser.add_argument("--poll-interval", type=float, default=5.0, help="Seconds between polls for new data")
     parser.add_argument("--once", action="store_true", help="Process available data and exit (don't wait)")
     parser.add_argument("--rebuild", action="store_true", help="Drop collection and reindex everything from scratch")
+    parser.add_argument("--stats", action="store_true", help="Print index statistics and exit")
     args = parser.parse_args()
+
+    if args.stats:
+        _print_stats(args.qdrant_url, Path(args.data_dir))
+        return
 
     signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
