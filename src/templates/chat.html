@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Search Chat</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+      overflow: hidden;
+    }
+
+    .app-shell {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+    }
+
+    /* ─── Top Bar ──────────────────────────────────────────────────────── */
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1.25rem;
+      background: #fff;
+      border-bottom: 1px solid #e2e8f0;
+      flex-shrink: 0;
+    }
+
+    .top-bar-title {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #0f0f23;
+    }
+
+    .top-bar-title .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 0 2px #dcfce7;
+      flex-shrink: 0;
+    }
+
+    .top-bar-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .top-bar-link {
+      font-size: 0.8rem;
+      color: #6366f1;
+      text-decoration: none;
+      padding: 0.3rem 0.6rem;
+      border-radius: 6px;
+      transition: background 0.15s;
+    }
+
+    .top-bar-link:hover { background: #f1f5f9; }
+
+    .action-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0.4rem;
+      border-radius: 6px;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .action-btn:hover { background: #f1f5f9; color: #475569; }
+
+    /* ─── Messages ─────────────────────────────────────────────────────── */
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      scroll-behavior: smooth;
+      max-width: 840px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    .chat-messages::-webkit-scrollbar { width: 4px; }
+    .chat-messages::-webkit-scrollbar-track { background: transparent; }
+    .chat-messages::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 2px; }
+
+    .chat-welcome {
+      text-align: center;
+      padding: 4rem 1rem 2rem;
+      color: #94a3b8;
+    }
+
+    .chat-welcome svg { opacity: 0.3; margin-bottom: 1rem; }
+    .chat-welcome h2 { font-size: 1.25rem; font-weight: 600; color: #475569; margin-bottom: 0.5rem; }
+    .chat-welcome p { font-size: 0.875rem; line-height: 1.6; }
+
+    /* ─── Message Bubbles ──────────────────────────────────────────────── */
+    .msg { display: flex; max-width: 100%; }
+    .msg.user { justify-content: flex-end; }
+
+    .msg-bubble {
+      padding: 0.75rem 1rem;
+      border-radius: 16px;
+      font-size: 0.9rem;
+      line-height: 1.6;
+      max-width: 80%;
+      word-break: break-word;
+    }
+
+    .msg.user .msg-bubble {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+
+    .msg.assistant .msg-bubble {
+      background: #fff;
+      color: #1e293b;
+      border: 1px solid #f1f5f9;
+      border-bottom-left-radius: 4px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+
+    /* ─── Streaming cursor ─────────────────────────────────────────────── */
+    .chat-cursor {
+      display: inline-block;
+      width: 2px;
+      height: 0.9em;
+      background: #94a3b8;
+      border-radius: 1px;
+      vertical-align: text-bottom;
+      margin-left: 2px;
+      animation: blink 0.7s step-start infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0; }
+    }
+
+    /* ─── Markdown content ─────────────────────────────────────────────── */
+    .msg.assistant .msg-bubble-body { color: #1e293b; }
+    .msg.assistant .msg-bubble-body p { margin-bottom: 0.5em; }
+    .msg.assistant .msg-bubble-body p:last-child { margin-bottom: 0; }
+
+    .msg.assistant .msg-bubble-body h1,
+    .msg.assistant .msg-bubble-body h2,
+    .msg.assistant .msg-bubble-body h3,
+    .msg.assistant .msg-bubble-body h4 {
+      font-size: 0.95em;
+      font-weight: 600;
+      margin: 0.6em 0 0.25em;
+    }
+
+    .msg.assistant .msg-bubble-body ul,
+    .msg.assistant .msg-bubble-body ol { padding-left: 1.35em; margin: 0.3em 0; }
+    .msg.assistant .msg-bubble-body li { margin: 0.2em 0; }
+
+    .msg.assistant .msg-bubble-body code {
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+      font-size: 0.8125em;
+      background: #e8edf5;
+      border-radius: 4px;
+      padding: 0.1em 0.35em;
+    }
+
+    .msg.assistant .msg-bubble-body pre {
+      background: #1e293b;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      overflow-x: auto;
+      margin: 0.5em 0;
+    }
+
+    .msg.assistant .msg-bubble-body pre code {
+      background: none;
+      padding: 0;
+      color: #e2e8f0;
+      font-size: 0.8125em;
+    }
+
+    .msg.assistant .msg-bubble-body blockquote {
+      border-left: 3px solid #6366f1;
+      padding-left: 0.75em;
+      color: #64748b;
+      margin: 0.3em 0;
+    }
+
+    .msg.assistant .msg-bubble-body a {
+      color: #6366f1;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .msg.assistant .msg-bubble-body hr {
+      border: none;
+      border-top: 1px solid #e2e8f0;
+      margin: 0.5em 0;
+    }
+
+    .msg.assistant .msg-bubble-body th { text-align: left; }
+
+    /* ─── Chat Footer ──────────────────────────────────────────────────── */
+    .chat-footer {
+      padding: 0.875rem 1.25rem;
+      background: #fff;
+      border-top: 1px solid #f1f5f9;
+      flex-shrink: 0;
+    }
+
+    .chat-footer-inner {
+      max-width: 840px;
+      margin: 0 auto;
+    }
+
+    .chat-input-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: #f8fafc;
+      border: 2px solid #e2e8f0;
+      border-radius: 16px;
+      padding: 0.5rem 0.5rem 0.5rem 1rem;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .chat-input-row:focus-within {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+
+    .chat-input {
+      flex: 1;
+      border: none;
+      background: transparent;
+      font-size: 0.9rem;
+      color: #1e293b;
+      resize: none;
+      outline: none;
+      line-height: 1.5;
+      max-height: 150px;
+      min-height: 24px;
+      font-family: inherit;
+    }
+
+    .chat-input::placeholder { color: #94a3b8; }
+
+    .chat-send-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 12px;
+      border: none;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+
+    .chat-send-btn:hover { opacity: 0.9; transform: scale(1.05); }
+    .chat-send-btn:active { transform: scale(0.95); }
+    .chat-send-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    .chat-footer-hint {
+      text-align: center;
+      font-size: 0.7rem;
+      color: #cbd5e1;
+      margin-top: 0.4rem;
+    }
+
+    /* ─── Responsive ───────────────────────────────────────────────────── */
+    @media (max-width: 600px) {
+      .chat-messages { padding: 1rem; }
+      .msg-bubble { max-width: 92%; }
+      .chat-footer { padding: 0.75rem 1rem; }
+    }
+  </style>
+
+  <script>window.__CHAT_API_KEY__ = {{ chat_api_key | tojson }};</script>
+  <script type="importmap">
+  {
+    "imports": {
+      "markdown-it": "https://esm.sh/markdown-it@14",
+      "dompurify":   "https://esm.sh/dompurify@3"
+    }
+  }
+  </script>
+</head>
+<body>
+
+<div class="app-shell chat-open" id="app-shell">
+
+  <div class="top-bar">
+    <div class="top-bar-title">
+      <span class="dot"></span>
+      Search Chat
+    </div>
+    <div class="top-bar-actions">
+      <a class="top-bar-link" href="/">Search</a>
+      <button class="action-btn" id="chat-clear-btn" aria-label="Clear history" title="Clear history">
+        <svg width="16" height="16" viewBox="0 0 14 14" fill="none">
+          <path d="M2 3.5h10M5 3.5V2.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5v1M3 3.5l.7 7.5a.5.5 0 0 0 .5.5h5.6a.5.5 0 0 0 .5-.5L11 3.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- chat.js expects these elements — we use a hidden aside structure -->
+  <aside class="chat-aside" id="chat-aside" style="display:none;"></aside>
+
+  <div class="chat-messages" id="chat-messages">
+    <div class="chat-welcome" id="chat-welcome">
+      <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+        <circle cx="22" cy="22" r="14" stroke="#6366f1" stroke-width="2.5" fill="none"/>
+        <path d="M32 32L42 42" stroke="#6366f1" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+      <h2>Search Chat</h2>
+      <p>Ask questions about any topic. I'll search across Wikipedia, arXiv,<br>German law, and PubMed to find answers.</p>
+    </div>
+  </div>
+
+  <footer class="chat-footer">
+    <div class="chat-footer-inner">
+      <div class="chat-input-row">
+        <textarea
+          class="chat-input"
+          id="chat-input"
+          placeholder="Ask a question..."
+          rows="1"
+          aria-label="Chat message"
+        ></textarea>
+        <button class="chat-send-btn" id="chat-send-btn" aria-label="Send message" disabled>
+          <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+            <path d="M14 2L2 7.5l5 1.5 1.5 5L14 2z" fill="currentColor"/>
+          </svg>
+        </button>
+      </div>
+      <div class="chat-footer-hint">Powered by local search index</div>
+    </div>
+  </footer>
+
+</div>
+
+<!-- Hidden elements that chat.js expects -->
+<button id="chat-toggle-btn" style="display:none;"></button>
+<button id="chat-mode-btn" style="display:none;" data-mode="user"></button>
+<button id="chat-close-btn" style="display:none;"></button>
+<div id="chat-resize-handle" style="display:none;"></div>
+
+<script type="module" src="/static/chat/chat.js"></script>
+</body>
+</html>

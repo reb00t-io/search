@@ -330,6 +330,18 @@ async def index():
     )
 
 
+@app.route("/chat")
+async def chat():
+    if not _is_authenticated():
+        return redirect(url_for("login"))
+    return await render_template(
+        "chat.html",
+        version=VERSION,
+        deploy_date=DEPLOY_DATE,
+        chat_api_key=API_KEY,
+    )
+
+
 @app.route("/v1/sessions/latest", methods=["GET"])
 async def get_latest_session():
     if API_KEY and request.headers.get("Authorization", "") != f"Bearer {API_KEY}":

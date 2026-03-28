@@ -19,6 +19,43 @@ except ImportError:
     from runtime_logs import get_backend_logs, normalize_log_limit
     from web_tools import fetch_url, normalize_max_chars, normalize_max_results, web_search
 
+SEARCH_SERVICE_PORT = os.environ.get("PORT", "31000")
+
+
+async def _local_search(session: aiohttp.ClientSession, query: str, max_results: int) -> dict[str, Any]:
+    """Search using the local search service instead of DuckDuckGo."""
+    url = f"http://localhost:{SEARCH_SERVICE_PORT}/v1/search"
+    params = {"q": query, "limit": max_results, "group_by": "chunks", "mode": "hybrid"}
+    try:
+        async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+            if resp.status != 200:
+                # Fall back to DuckDuckGo if search service is unavailable
+                return await web_search(session, query, max_results)
+            data = await resp.json()
+    except Exception:
+        # Fall back to DuckDuckGo
+        return await web_search(session, query, max_results)
+
+    results = []
+    for r in data.get("results", []):
+        # Strip **bold** markers from snippet
+        snippet = (r.get("snippet") or "").replace("**", "")
+        results.append({
+            "title": r.get("title", ""),
+            "snippet": snippet,
+            "url": r.get("url", ""),
+            "source": r.get("source", ""),
+        })
+
+    return {
+        "query": query,
+        "results": results[:max_results],
+        "usage_instructions": (
+            "These results come from the local search index (Wikipedia, arXiv, German law, PubMed). "
+            "Use them to answer the user's question. Cite sources with URLs when relevant."
+        ),
+    }
+
 DEFAULT_TIMEOUT_SECONDS = 20
 MAX_OUTPUT_CHARS = 12000
 KILL_GRACE_SECONDS = 15
@@ -172,7 +209,7 @@ async def execute_tool_call(session: aiohttp.ClientSession, tool_call: dict[str,
         query = str(fn_args.get("query") or "").strip()
         if not query:
             return {"error": "Missing required argument: query"}
-        return await web_search(session, query, normalize_max_results(fn_args.get("max_results", 5)))
+        return await _local_search(session, query, normalize_max_results(fn_args.get("max_results", 5)))
 
     if fn_name == "fetch_url":
         url = str(fn_args.get("url") or "").strip()
