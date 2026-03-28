@@ -2,12 +2,18 @@ import logging
 import hashlib
 import json
 import os
+import sys
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
 from quart import Quart, g, jsonify, redirect, render_template, request, session, url_for
+
+# Add project root to path so pipeline modules can be imported
+_project_root = Path(__file__).resolve().parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
 
 try:
     from .runtime_logs import configure_runtime_log_capture
@@ -384,9 +390,75 @@ async def chat_responses():
     )
 
 
+# --- Search API ---
+_search_client = None
+_search_bm25 = None
+_search_initialized = False
+
+def _init_search():
+    """Lazily initialize search infrastructure (Qdrant client + BM25 vocab)."""
+    global _search_client, _search_bm25, _search_initialized
+    if _search_initialized:
+        return _search_client is not None
+
+    _search_initialized = True
+    try:
+        from qdrant_client import QdrantClient
+        from indexing.bm25 import BM25Encoder
+
+        qdrant_url = os.environ.get("QDRANT_URL", "http://localhost:6333")
+        _search_client = QdrantClient(url=qdrant_url, timeout=10)
+        # Verify connection
+        _search_client.get_collections()
+
+        _search_bm25 = BM25Encoder()
+        data_dir = Path(os.environ.get("DATA_DIR", "data"))
+        vocab_path = data_dir / "index" / "bm25_vocab.json"
+        _search_bm25.load(vocab_path)
+        logger.info("Search initialized: Qdrant at %s, vocab=%d tokens", qdrant_url, len(_search_bm25.vocab))
+        return True
+    except Exception as e:
+        logger.warning("Search not available: %s", e)
+        _search_client = None
+        _search_bm25 = None
+        return False
+
+
+@app.route("/v1/search", methods=["GET"])
+async def search_endpoint():
+    if not _init_search():
+        return jsonify({"error": "Search not available. Run indexing pipeline first."}), 503
+
+    q = request.args.get("q", "").strip()
+    if not q:
+        return jsonify({"error": "Query parameter 'q' is required"}), 400
+
+    lang = request.args.get("lang", "all")
+    source = request.args.get("source", "all")
+    mode = request.args.get("mode", "hybrid")
+    limit = min(int(request.args.get("limit", "10")), 100)
+    offset = int(request.args.get("offset", "0"))
+
+    if mode not in ("hybrid", "bm25", "vector"):
+        return jsonify({"error": f"Invalid mode: {mode}. Use: hybrid, bm25, vector"}), 400
+
+    from serving.search import search
+    result = search(
+        client=_search_client,
+        bm25=_search_bm25,
+        query=q,
+        mode=mode,
+        lang=lang if lang != "all" else None,
+        source=source if source != "all" else None,
+        limit=limit,
+        offset=offset,
+    )
+    return jsonify(result)
+
+
 if __name__ == "__main__":
     import uvicorn
 
-    logger.info("bootstrap v%s (deployed %s)", VERSION, DEPLOY_DATE)
+    logger.info("search v%s (deployed %s)", VERSION, DEPLOY_DATE)
     port = int(os.environ["PORT"])
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
