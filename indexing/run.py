@@ -88,9 +88,11 @@ def _print_stats(qdrant_url: str, data_dir: Path):
     content_bytes = _dir_size(data_dir / "content")
     total_bytes = _dir_size(data_dir)
 
-    print(f"Documents:     {points}")
+    filtered_total = sum(source_counts.values())
+    print(f"Ingested:      {filtered_total}")
     print(f"  full_text:   {ct_counts.get('full_text', 0)}")
     print(f"  abstract:    {ct_counts.get('abstract', 0)}")
+    print(f"Indexed:       {points}" + (f"  (run --once or --rebuild to index {filtered_total - points} pending)" if points < filtered_total else ""))
     print(f"Segments:      {segments}")
     print(f"Content files: {_fmt_bytes(content_bytes)}")
     print(f"Data dir:      {_fmt_bytes(total_bytes)}")
