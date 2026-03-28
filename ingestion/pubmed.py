@@ -66,22 +66,26 @@ class PubmedAdapter(SourceAdapter):
             return []
 
     def _fetch_articles(self, pmids: list[str]) -> list[dict]:
-        """Fetch article details for a list of PMIDs."""
+        """Fetch article details for a list of PMIDs (batched to avoid URI too long)."""
         if not pmids:
             return []
-        params = {
-            "db": "pubmed",
-            "id": ",".join(pmids),
-            "rettype": "xml",
-            "retmode": "xml",
-        }
-        try:
-            resp = self.client.get(EFETCH_URL, params=params)
-            resp.raise_for_status()
-            return self._parse_articles_xml(resp.text)
-        except Exception as e:
-            logger.warning("PubMed fetch error: %s", e)
-            return []
+        all_articles = []
+        batch_size = 50  # ~50 PMIDs keeps the URL well under limits
+        for i in range(0, len(pmids), batch_size):
+            batch = pmids[i : i + batch_size]
+            params = {
+                "db": "pubmed",
+                "id": ",".join(batch),
+                "rettype": "xml",
+                "retmode": "xml",
+            }
+            try:
+                resp = self.client.get(EFETCH_URL, params=params)
+                resp.raise_for_status()
+                all_articles.extend(self._parse_articles_xml(resp.text))
+            except Exception as e:
+                logger.warning("PubMed fetch error (batch %d-%d): %s", i, i + len(batch), e)
+        return all_articles
 
     def _parse_articles_xml(self, xml_text: str) -> list[dict]:
         """Parse PubMed XML response into article dicts."""
