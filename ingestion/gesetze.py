@@ -13,6 +13,7 @@ from collections.abc import Iterator
 import httpx
 
 from ingestion.base import Document, SourceAdapter
+from ingestion.chunking import chunk_text
 
 logger = logging.getLogger(__name__)
 
@@ -157,17 +158,12 @@ class GesetzeAdapter(SourceAdapter):
             if not sections:
                 continue
 
-            # Group small sections together into chunks
             law_abbrev = sections[0]["law_abbrev"] if sections else ""
             law_title = sections[0]["law_title"] if sections else entry["title"]
             slug = re.sub(r"[^a-z0-9]+", "-", law_abbrev.lower()).strip("-") or "gesetz"
 
-            current_chunk = f"# {law_title}"
-            if law_abbrev:
-                current_chunk += f" ({law_abbrev})"
-            current_chunk += "\n\n"
-            chunk_idx = 0
-
+            # Assemble full law text with section headings, then chunk
+            full_text = ""
             for section in sections:
                 header = ""
                 if section["section_num"]:
@@ -177,31 +173,15 @@ class GesetzeAdapter(SourceAdapter):
                 elif section["section_title"]:
                     header = f"## {section['section_title']}"
 
-                section_text = header + "\n\n" + section["text"] + "\n\n" if header else section["text"] + "\n\n"
+                if header:
+                    full_text += header + "\n\n" + section["text"] + "\n\n"
+                else:
+                    full_text += section["text"] + "\n\n"
 
-                if len(current_chunk.split()) + len(section_text.split()) > 800 and len(current_chunk.split()) > 50:
-                    doc_id = f"gesetze:{slug}:{chunk_idx}"
-                    yield Document(
-                        id=doc_id,
-                        source="gesetze",
-                        title=law_title,
-                        url=f"https://www.gesetze-im-internet.de/{slug}/",
-                        language="de",
-                        text=current_chunk.strip(),
-                        metadata={
-                            "law_abbrev": law_abbrev,
-                            "chunk_index": chunk_idx,
-                        },
-                        timestamp="",
-                    )
-                    doc_count += 1
-                    chunk_idx += 1
-                    current_chunk = f"# {law_title} ({law_abbrev})\n\n" if law_abbrev else f"# {law_title}\n\n"
+            title_with_abbrev = f"{law_title} ({law_abbrev})" if law_abbrev else law_title
+            chunks = chunk_text(full_text, title=title_with_abbrev)
 
-                current_chunk += section_text
-
-            # Emit final chunk
-            if current_chunk.strip() and len(current_chunk.split()) > 30:
+            for chunk_idx, chunk in enumerate(chunks):
                 doc_id = f"gesetze:{slug}:{chunk_idx}"
                 yield Document(
                     id=doc_id,
@@ -209,7 +189,7 @@ class GesetzeAdapter(SourceAdapter):
                     title=law_title,
                     url=f"https://www.gesetze-im-internet.de/{slug}/",
                     language="de",
-                    text=current_chunk.strip(),
+                    text=chunk,
                     metadata={
                         "law_abbrev": law_abbrev,
                         "chunk_index": chunk_idx,

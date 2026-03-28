@@ -11,6 +11,7 @@ import httpx
 import mwparserfromhell
 
 from ingestion.base import Document, SourceAdapter
+from ingestion.chunking import chunk_text
 
 logger = logging.getLogger(__name__)
 
@@ -108,29 +109,8 @@ def _wikitext_to_markdown(wikitext: str) -> str:
 
 
 def _chunk_text(text: str, title: str, max_tokens: int = 800) -> list[str]:
-    """Split text into chunks at heading boundaries, aiming for ~max_tokens words."""
-    # Split at ## headings
-    sections = re.split(r"(?=^## )", text, flags=re.MULTILINE)
-    chunks = []
-    current = f"# {title}\n\n"
-
-    for section in sections:
-        section = section.strip()
-        if not section:
-            continue
-        words_in_current = len(current.split())
-        words_in_section = len(section.split())
-
-        if words_in_current + words_in_section > max_tokens and words_in_current > 50:
-            chunks.append(current.strip())
-            current = section + "\n\n"
-        else:
-            current += section + "\n\n"
-
-    if current.strip():
-        chunks.append(current.strip())
-
-    return chunks if chunks else [text]
+    """Split text into chunks at heading/paragraph/sentence boundaries."""
+    return chunk_text(text, title=title, target_words=max_tokens)
 
 
 class WikipediaAdapter(SourceAdapter):
