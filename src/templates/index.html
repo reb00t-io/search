@@ -3,606 +3,478 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>bootstrap</title>
+  <title>Search</title>
   <style>
-    /* ─── Reset & Base ──────────────────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     html, body {
       height: 100%;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
-      background: #f0f2f5;
+      background: #f8f9fa;
       color: #1a1a2e;
-      overflow: hidden;
     }
 
-    /* ─── App Shell ─────────────────────────────────────────────────────────── */
-    .app-shell {
-      display: flex;
-      height: 100vh;
-      width: 100vw;
-      overflow: hidden;
+    .container {
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
     }
 
-    /* ─── Main Content ──────────────────────────────────────────────────────── */
-    .main-content {
-      flex: 1;
-      overflow-y: auto;
-      padding: 3rem 4rem;
-      min-width: 0;
-      transition: padding 0.3s ease;
+    /* --- Header --- */
+    .search-header {
+      text-align: center;
+      padding: 3rem 0 2rem;
     }
 
-    .main-content h1 {
-      font-size: 2.5rem;
+    .search-header h1 {
+      font-size: 2rem;
       font-weight: 700;
       letter-spacing: -0.03em;
       color: #0f0f23;
-      margin-bottom: 0.5rem;
+      margin-bottom: 0.25rem;
     }
 
-    .main-content p {
-      font-size: 0.9rem;
-      color: #64748b;
+    .search-header .subtitle {
+      font-size: 0.85rem;
+      color: #94a3b8;
     }
 
-    /* ════════════════════════════════════════════════════════════════════════════
-       CHAT PANEL — remove everything between these markers to strip the feature
-       ════════════════════════════════════════════════════════════════════════════ */
-
-    /* ─── Chat Aside ────────────────────────────────────────────────────────── */
-    .chat-aside {
-      width: 0;
-      flex-shrink: 0;
-      overflow: hidden;
-      background: #ffffff;
-      border-left: 1px solid #e2e8f0;
+    /* --- Search Form --- */
+    .search-form {
       display: flex;
-      flex-direction: row;
-      transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      box-shadow: -4px 0 24px rgba(0, 0, 0, 0.06);
-      position: relative;
-    }
-
-    .app-shell.chat-open .chat-aside {
-      width: 400px;
-      min-width: 280px;
-    }
-
-    /* Disable the slide transition while the user is actively dragging */
-    .chat-aside.is-resizing {
-      transition: none;
-    }
-
-    /* ─── Resize handle ─────────────────────────────────────────────────────── */
-    .chat-resize-handle {
-      position: absolute;
-      left: 0;
-      top: 0;
-      bottom: 0;
-      width: 6px;
-      cursor: col-resize;
-      z-index: 10;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .chat-resize-handle::after {
-      content: '';
-      width: 2px;
-      height: 32px;
-      border-radius: 1px;
-      background: #cbd5e1;
-      transition: background 0.15s, height 0.15s;
-    }
-
-    .chat-resize-handle:hover::after,
-    .chat-aside.is-resizing .chat-resize-handle::after {
-      background: #6366f1;
-      height: 48px;
-    }
-
-    /* ─── Chat Inner Layout ─────────────────────────────────────────────────── */
-    .chat-inner {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      flex: 1;
-      min-width: 0;
-      padding-left: 6px; /* leave room for the resize handle */
-    }
-
-    .chat-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 1rem 1.25rem;
-      border-bottom: 1px solid #f1f5f9;
-      background: #fff;
-      flex-shrink: 0;
-    }
-
-    .chat-header-title {
-      display: flex;
-      align-items: center;
       gap: 0.5rem;
-      font-size: 0.875rem;
-      font-weight: 600;
-      color: #0f0f23;
-    }
-
-    .chat-header-title .dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #22c55e;
-      box-shadow: 0 0 0 2px #dcfce7;
-      flex-shrink: 0;
-    }
-
-    .chat-header-actions {
-      display: flex;
-      align-items: center;
-      gap: 0.25rem;
-    }
-
-    .chat-mode-btn {
-      border: 1px solid #dbe4f0;
-      background: #f8fafc;
-      color: #475569;
-      border-radius: 999px;
-      padding: 0.38rem 0.7rem;
-      font-size: 0.75rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.15s, color 0.15s, border-color 0.15s;
-    }
-
-    .chat-mode-btn[data-mode="dev"] {
-      background: #eef2ff;
-      border-color: #c7d2fe;
-      color: #4338ca;
-    }
-
-    .chat-mode-btn:hover {
-      background: #f1f5f9;
-    }
-
-    .chat-mode-btn[data-mode="dev"]:hover {
-      background: #e0e7ff;
-    }
-
-    .chat-action-btn {
-      background: none;
-      border: none;
-      cursor: pointer;
-      padding: 0.3rem;
-      border-radius: 6px;
-      color: #94a3b8;
-      display: flex;
-      align-items: center;
-      transition: background 0.15s, color 0.15s;
-    }
-
-    .chat-action-btn:hover {
-      background: #f1f5f9;
-      color: #475569;
-    }
-
-    .chat-messages {
-      flex: 1;
-      overflow-y: auto;
-      padding: 1.25rem;
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-      scroll-behavior: smooth;
-    }
-
-    .chat-messages::-webkit-scrollbar { width: 4px; }
-    .chat-messages::-webkit-scrollbar-track { background: transparent; }
-    .chat-messages::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 2px; }
-
-    .chat-welcome {
-      text-align: center;
-      padding: 2rem 1rem;
-      color: #94a3b8;
-    }
-
-    .chat-welcome svg {
-      opacity: 0.4;
       margin-bottom: 0.75rem;
     }
 
-    .chat-welcome p {
-      font-size: 0.8125rem;
-      line-height: 1.5;
-    }
-
-    /* ─── Message Bubbles ───────────────────────────────────────────────────── */
-    .msg {
-      display: flex;
-      max-width: 100%;
-    }
-
-    .msg.user { justify-content: flex-end; }
-
-    .msg-bubble {
-      padding: 0.625rem 0.875rem;
-      border-radius: 14px;
-      font-size: 0.875rem;
-      line-height: 1.55;
-      max-width: 88%;
-      word-break: break-word;
-    }
-
-    .msg.user .msg-bubble {
-      background: linear-gradient(135deg, #6366f1, #8b5cf6);
-      color: #fff;
-      border-bottom-right-radius: 4px;
-    }
-
-    .msg.assistant .msg-bubble {
-      background: #f8fafc;
-      color: #1e293b;
-      border: 1px solid #f1f5f9;
-      border-bottom-left-radius: 4px;
-    }
-
-    /* ─── Streaming cursor ──────────────────────────────────────────────────── */
-    .chat-cursor {
-      display: inline-block;
-      width: 2px;
-      height: 0.9em;
-      background: #94a3b8;
-      border-radius: 1px;
-      vertical-align: text-bottom;
-      margin-left: 2px;
-      animation: blink 0.7s step-start infinite;
-    }
-
-    @keyframes blink {
-      0%, 100% { opacity: 1; }
-      50%       { opacity: 0; }
-    }
-
-    /* ─── Markdown content (assistant bubbles) ──────────────────────────────── */
-    .msg.assistant .msg-bubble-body { color: #1e293b; }
-
-    .msg.assistant .msg-bubble-body p          { margin-bottom: 0.5em; }
-    .msg.assistant .msg-bubble-body p:last-child { margin-bottom: 0; }
-
-    .msg.assistant .msg-bubble-body h1,
-    .msg.assistant .msg-bubble-body h2,
-    .msg.assistant .msg-bubble-body h3,
-    .msg.assistant .msg-bubble-body h4         {
-      font-size: 0.9375em;
-      font-weight: 600;
-      margin: 0.6em 0 0.25em;
-    }
-
-    .msg.assistant .msg-bubble-body ul,
-    .msg.assistant .msg-bubble-body ol         { padding-left: 1.35em; margin: 0.3em 0; }
-    .msg.assistant .msg-bubble-body li         { margin: 0.2em 0; }
-
-    .msg.assistant .msg-bubble-body code       {
-      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
-      font-size: 0.8125em;
-      background: #e8edf5;
-      border-radius: 4px;
-      padding: 0.1em 0.35em;
-    }
-
-    .msg.assistant .msg-bubble-body pre        {
-      background: #1e293b;
-      border-radius: 8px;
-      padding: 0.75rem 1rem;
-      overflow-x: auto;
-      margin: 0.5em 0;
-    }
-
-    .msg.assistant .msg-bubble-body pre code   {
-      background: none;
-      padding: 0;
-      color: #e2e8f0;
-      font-size: 0.8125em;
-    }
-
-    .msg.assistant .msg-bubble-body blockquote {
-      border-left: 3px solid #6366f1;
-      padding-left: 0.75em;
-      color: #64748b;
-      margin: 0.3em 0;
-    }
-
-    .msg.assistant .msg-bubble-body a          {
-      color: #6366f1;
-      text-decoration: underline;
-      text-underline-offset: 2px;
-    }
-
-    .msg.assistant .msg-bubble-body hr         {
-      border: none;
-      border-top: 1px solid #e2e8f0;
-      margin: 0.5em 0;
-    }
-
-    .msg.assistant .msg-bubble-body th         { text-align: left; }
-
-    /* ─── Chat Footer ───────────────────────────────────────────────────────── */
-    .chat-footer {
-      padding: 0.875rem 1.25rem;
-      border-top: 1px solid #f1f5f9;
-      background: #fff;
-      flex-shrink: 0;
-    }
-
-    .chat-input-row {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 14px;
-      padding: 0.5rem 0.25rem 0.5rem 0.875rem;
-      transition: border-color 0.15s, box-shadow 0.15s;
-    }
-
-    .chat-input-row:focus-within {
-      border-color: #6366f1;
-      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-    }
-
-    .chat-input {
+    .search-input {
       flex: 1;
-      border: none;
-      background: transparent;
-      font-size: 0.875rem;
-      color: #1e293b;
-      resize: none;
+      padding: 0.75rem 1rem;
+      font-size: 1rem;
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
       outline: none;
-      line-height: 1.5;
-      max-height: 120px;
-      min-height: 22px;
+      background: #fff;
+      transition: border-color 0.15s, box-shadow 0.15s;
       font-family: inherit;
     }
 
-    .chat-input::placeholder { color: #94a3b8; }
+    .search-input:focus {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+    }
 
-    .chat-send-btn {
-      width: 32px;
-      height: 32px;
-      border-radius: 10px;
+    .search-btn {
+      padding: 0.75rem 1.5rem;
+      font-size: 0.95rem;
+      font-weight: 600;
       border: none;
-      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      border-radius: 12px;
+      background: #6366f1;
       color: #fff;
       cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      white-space: nowrap;
+    }
+
+    .search-btn:hover { background: #4f46e5; }
+    .search-btn:active { transform: scale(0.97); }
+
+    /* --- Filters --- */
+    .filters {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.5rem;
+    }
+
+    .filter-select {
+      padding: 0.4rem 0.75rem;
+      font-size: 0.8rem;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      background: #fff;
+      color: #475569;
+      cursor: pointer;
+      outline: none;
+      font-family: inherit;
+    }
+
+    .filter-select:focus { border-color: #6366f1; }
+
+    /* --- Status --- */
+    .search-status {
+      font-size: 0.8rem;
+      color: #64748b;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid #e2e8f0;
+      margin-bottom: 1rem;
+    }
+
+    .search-status.error {
+      color: #ef4444;
+    }
+
+    /* --- Results --- */
+    .result {
+      margin-bottom: 1.5rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid #f1f5f9;
+    }
+
+    .result:last-child { border-bottom: none; }
+
+    .result-header {
       display: flex;
       align-items: center;
-      justify-content: center;
+      gap: 0.5rem;
+      margin-bottom: 0.25rem;
+      flex-wrap: wrap;
+    }
+
+    .result-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #1e40af;
+      text-decoration: none;
+      line-height: 1.3;
+    }
+
+    .result-title:hover { text-decoration: underline; }
+
+    .badge {
+      display: inline-block;
+      padding: 0.125rem 0.5rem;
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-radius: 4px;
       flex-shrink: 0;
-      transition: opacity 0.15s, transform 0.1s;
     }
 
-    .chat-send-btn:hover { opacity: 0.9; transform: scale(1.05); }
-    .chat-send-btn:active { transform: scale(0.95); }
-    .chat-send-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    .badge-lang {
+      background: #dbeafe;
+      color: #1e40af;
+    }
 
-    /* ─── Chat Toggle Button ────────────────────────────────────────────────── */
-    .chat-toggle-btn {
-      position: fixed;
-      bottom: 1.5rem;
-      right: 1.5rem;
-      width: 52px;
-      height: 52px;
-      border-radius: 50%;
-      border: none;
-      background: linear-gradient(135deg, #6366f1, #8b5cf6);
-      color: #fff;
-      cursor: pointer;
+    .badge-source {
+      background: #f0fdf4;
+      color: #166534;
+    }
+
+    .result-url {
+      font-size: 0.78rem;
+      color: #16a34a;
+      margin-bottom: 0.35rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .result-url a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .result-url a:hover { text-decoration: underline; }
+
+    .result-snippet {
+      font-size: 0.875rem;
+      line-height: 1.6;
+      color: #334155;
+    }
+
+    .result-snippet strong {
+      color: #0f172a;
+      background: #fef9c3;
+      padding: 0.05em 0.15em;
+      border-radius: 2px;
+    }
+
+    .result-meta {
       display: flex;
-      align-items: center;
+      gap: 1rem;
+      margin-top: 0.35rem;
+      font-size: 0.75rem;
+      color: #94a3b8;
+    }
+
+    /* --- Pagination --- */
+    .pagination {
+      display: flex;
+      gap: 0.25rem;
       justify-content: center;
-      box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
-      transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s, opacity 0.3s;
-      z-index: 100;
+      margin-top: 2rem;
     }
 
-    .chat-toggle-btn:hover {
-      transform: scale(1.1);
-      box-shadow: 0 6px 28px rgba(99, 102, 241, 0.5);
+    .page-btn {
+      padding: 0.4rem 0.8rem;
+      font-size: 0.8rem;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      background: #fff;
+      color: #475569;
+      cursor: pointer;
+      transition: background 0.1s;
     }
 
-    .chat-toggle-btn:active { transform: scale(0.96); }
+    .page-btn:hover { background: #f1f5f9; }
+    .page-btn.active { background: #6366f1; color: #fff; border-color: #6366f1; }
+    .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    .app-shell.chat-open .chat-toggle-btn {
-      opacity: 0;
-      pointer-events: none;
+    /* --- Footer --- */
+    .footer {
+      text-align: center;
+      padding: 2rem 0 1rem;
+      font-size: 0.75rem;
+      color: #cbd5e1;
     }
 
-    .chat-toggle-btn .icon-chat { display: block; }
-    .chat-toggle-btn .icon-close { display: none; }
-
-    @media (max-width: 768px) {
-      html, body {
-        overflow: auto;
-      }
-
-      .app-shell {
-        display: block;
-        min-height: 100vh;
-        height: auto;
-        width: 100%;
-      }
-
-      .main-content {
-        min-height: 100vh;
-        padding: 2rem 1.25rem 6rem;
-      }
-
-      .chat-aside {
-        position: fixed;
-        left: 0;
-        right: 0;
-        top: 0;
-        bottom: 0;
-        width: 100%;
-        height: 100dvh;
-        border-left: none;
-        border-top: none;
-        border-radius: 0;
-        box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.12);
-        transform: translateY(100%);
-        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        z-index: 90;
-      }
-
-      .app-shell.chat-open .chat-aside {
-        width: 100%;
-        min-width: 0;
-        height: 100dvh;
-        transform: translateY(0);
-      }
-
-      .chat-resize-handle {
-        display: none;
-      }
-
-      .chat-inner {
-        height: 100%;
-        padding-left: 0;
-      }
-
-      .chat-header {
-        padding: 1rem 1rem;
-      }
-
-      #chat-close-btn {
-        width: 36px;
-        height: 36px;
-        border-radius: 50%;
-        background: #f1f5f9;
-        color: #475569;
-      }
-
-      .chat-messages {
-        padding: 1rem;
-      }
-
-      .chat-footer {
-        padding: 0.75rem 1rem 1rem;
-      }
-
-      .chat-toggle-btn {
-        right: 1rem;
-        bottom: 1rem;
-      }
+    /* --- Loading --- */
+    .loading {
+      text-align: center;
+      padding: 2rem;
+      color: #94a3b8;
     }
 
-    /* ═══════════════════════════ END CHAT PANEL ════════════════════════════ */
+    .spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 2px solid #e2e8f0;
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      margin-right: 0.5rem;
+      vertical-align: middle;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* --- Empty state --- */
+    .empty-state {
+      text-align: center;
+      padding: 4rem 1rem;
+      color: #94a3b8;
+    }
+
+    .empty-state svg {
+      opacity: 0.3;
+      margin-bottom: 1rem;
+    }
+
+    .empty-state p {
+      font-size: 0.9rem;
+    }
+
+    /* --- Responsive --- */
+    @media (max-width: 600px) {
+      .container { padding: 1rem; }
+      .search-header { padding: 2rem 0 1.5rem; }
+      .search-header h1 { font-size: 1.5rem; }
+      .search-form { flex-direction: column; }
+      .search-btn { width: 100%; }
+    }
   </style>
-
-  <!-- ════════════ CHAT IMPORTS — remove with the rest of the chat panel ════════════ -->
-  <script>window.__CHAT_API_KEY__ = {{ chat_api_key | tojson }};</script>
-  <script type="importmap">
-  {
-    "imports": {
-      "markdown-it": "https://esm.sh/markdown-it@14",
-      "dompurify":   "https://esm.sh/dompurify@3"
-    }
-  }
-  </script>
-  <!-- ══════════════════════════════════════════════════════════════════════════════ -->
 </head>
 <body>
 
-<div class="app-shell" id="app-shell">
+<div class="container">
+  <header class="search-header">
+    <h1>Search</h1>
+    <p class="subtitle">Hybrid search across Wikipedia &amp; arXiv</p>
+  </header>
 
-  <!-- ─── Main Content ──────────────────────────────────────────────────── -->
-  <main class="main-content">
-    <h1>hello</h1>
-    <p>v{{ version }} (deployed {{ deploy_date }})</p>
-  </main>
+  <form class="search-form" id="search-form">
+    <input
+      type="text"
+      class="search-input"
+      id="search-input"
+      placeholder="Search..."
+      autofocus
+      autocomplete="off"
+    >
+    <button type="submit" class="search-btn">Search</button>
+  </form>
 
-  <!-- ════════════════════════════════════════════════════════════════════════
-       CHAT PANEL — remove this <aside> and the toggle <button> below,
-       plus the <style id="chat-styles"> block and <script id="chat-script">
-       to fully strip the chat feature.
-       ════════════════════════════════════════════════════════════════════════ -->
-  <aside class="chat-aside" id="chat-aside" aria-label="AI Chat">
-    <div class="chat-resize-handle" id="chat-resize-handle" aria-hidden="true"></div>
-    <div class="chat-inner">
+  <div class="filters">
+    <select class="filter-select" id="filter-lang">
+      <option value="all">All languages</option>
+      <option value="de">Deutsch</option>
+      <option value="en">English</option>
+    </select>
+    <select class="filter-select" id="filter-source">
+      <option value="all">All sources</option>
+      <option value="wiki">Wikipedia</option>
+      <option value="arxiv">arXiv</option>
+    </select>
+    <select class="filter-select" id="filter-mode">
+      <option value="hybrid">Hybrid (BM25 + Vector)</option>
+      <option value="bm25">BM25 only</option>
+      <option value="vector">Vector only</option>
+    </select>
+  </div>
 
-      <header class="chat-header">
-        <div class="chat-header-title">
-          <span class="dot"></span>
-          AI Assistant
-        </div>
-        <div class="chat-header-actions">
-          <button class="chat-mode-btn" id="chat-mode-btn" type="button" data-mode="user" aria-label="Switch to dev mode" title="Switch to dev mode">
-            User mode
-          </button>
-          <button class="chat-action-btn" id="chat-clear-btn" aria-label="Clear history" title="Clear history">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M2 3.5h10M5 3.5V2.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5v1M3 3.5l.7 7.5a.5.5 0 0 0 .5.5h5.6a.5.5 0 0 0 .5-.5L11 3.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
-          <button class="chat-action-btn" id="chat-close-btn" aria-label="Close chat" title="Close">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-          </button>
-        </div>
-      </header>
-
-      <div class="chat-messages" id="chat-messages">
-        <div class="chat-welcome" id="chat-welcome">
-          <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-            <rect width="36" height="36" rx="18" fill="#6366f1" opacity="0.12"/>
-            <path d="M10 14h16M10 18h10M10 22h12" stroke="#6366f1" stroke-width="1.75" stroke-linecap="round"/>
-          </svg>
-          <p>Ask me anything.<br>I'm here to help.</p>
-        </div>
-      </div>
-
-      <footer class="chat-footer">
-        <div class="chat-input-row">
-          <textarea
-            class="chat-input"
-            id="chat-input"
-            placeholder="Message…"
-            rows="1"
-            aria-label="Chat message"
-          ></textarea>
-          <button class="chat-send-btn" id="chat-send-btn" aria-label="Send message" disabled>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M14 2L2 7.5l5 1.5 1.5 5L14 2z" fill="currentColor"/>
-            </svg>
-          </button>
-        </div>
-      </footer>
-
+  <div id="results-container">
+    <div class="empty-state" id="empty-state">
+      <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+        <circle cx="22" cy="22" r="14" stroke="#94a3b8" stroke-width="3"/>
+        <path d="M32 32L42 42" stroke="#94a3b8" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+      <p>Enter a query to search across Wikipedia and arXiv papers.</p>
     </div>
-  </aside>
-  <!-- ═══════════════════════════ END CHAT ASIDE ═══════════════════════════ -->
+  </div>
 
-  <!-- ════════════════ CHAT TOGGLE BUTTON ════════════════ -->
-  <button class="chat-toggle-btn" id="chat-toggle-btn" aria-label="Open chat">
-    <svg class="icon-chat" width="22" height="22" viewBox="0 0 22 22" fill="none">
-      <path d="M4 4h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H7l-4 3V5a1 1 0 0 1 1-1z"
-            stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" fill="none"/>
-    </svg>
-  </button>
-  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <footer class="footer">v{{ version }}</footer>
+</div>
 
-</div><!-- /.app-shell -->
+<script>
+(function() {
+  const form = document.getElementById('search-form');
+  const input = document.getElementById('search-input');
+  const container = document.getElementById('results-container');
+  const langSelect = document.getElementById('filter-lang');
+  const sourceSelect = document.getElementById('filter-source');
+  const modeSelect = document.getElementById('filter-mode');
 
-<!-- ════════════════════════════════════════════════════════════════════════════
-     CHAT SCRIPT — remove this tag together with the aside and toggle button
-     ════════════════════════════════════════════════════════════════════════════ -->
-<script type="module" src="/static/chat/chat.js"></script>
-<!-- ═══════════════════════════ END CHAT SCRIPT ══════════════════════════ -->
+  const PAGE_SIZE = 10;
+  let currentPage = 0;
+  let currentQuery = '';
 
+  // Restore state from URL
+  function restoreFromURL() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('q')) {
+      input.value = params.get('q');
+      langSelect.value = params.get('lang') || 'all';
+      sourceSelect.value = params.get('source') || 'all';
+      modeSelect.value = params.get('mode') || 'hybrid';
+      currentPage = parseInt(params.get('page') || '0');
+      doSearch();
+    }
+  }
+
+  function updateURL() {
+    const params = new URLSearchParams();
+    params.set('q', input.value);
+    if (langSelect.value !== 'all') params.set('lang', langSelect.value);
+    if (sourceSelect.value !== 'all') params.set('source', sourceSelect.value);
+    if (modeSelect.value !== 'hybrid') params.set('mode', modeSelect.value);
+    if (currentPage > 0) params.set('page', currentPage.toString());
+    history.replaceState(null, '', '?' + params.toString());
+  }
+
+  async function doSearch() {
+    const q = input.value.trim();
+    if (!q) return;
+    currentQuery = q;
+    updateURL();
+
+    container.innerHTML = '<div class="loading"><span class="spinner"></span>Searching...</div>';
+
+    const params = new URLSearchParams({
+      q,
+      lang: langSelect.value,
+      source: sourceSelect.value,
+      mode: modeSelect.value,
+      limit: PAGE_SIZE.toString(),
+      offset: (currentPage * PAGE_SIZE).toString(),
+    });
+
+    try {
+      const resp = await fetch('/v1/search?' + params.toString());
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        container.innerHTML = `<div class="search-status error">${data.error || 'Search failed'}</div>`;
+        return;
+      }
+
+      renderResults(data);
+    } catch (err) {
+      container.innerHTML = `<div class="search-status error">Connection error: ${err.message}</div>`;
+    }
+  }
+
+  function renderMarkdownSnippet(text) {
+    // Convert **bold** to <strong> tags
+    return text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  }
+
+  function renderResults(data) {
+    if (!data.results || data.results.length === 0) {
+      container.innerHTML = `
+        <div class="search-status">No results for "${escapeHtml(data.query)}" (${data.took_ms}ms)</div>
+      `;
+      return;
+    }
+
+    let html = `<div class="search-status">${data.total} result${data.total !== 1 ? 's' : ''} (${data.took_ms}ms, mode: ${data.mode})</div>`;
+
+    for (const r of data.results) {
+      const date = r.timestamp ? r.timestamp.split('T')[0] : '';
+      html += `
+        <div class="result">
+          <div class="result-header">
+            <a class="result-title" href="${escapeHtml(r.url)}" target="_blank" rel="noopener">${escapeHtml(r.title)}</a>
+            <span class="badge badge-lang">${escapeHtml(r.language)}</span>
+            <span class="badge badge-source">${escapeHtml(r.source)}</span>
+          </div>
+          <div class="result-url"><a href="${escapeHtml(r.url)}" target="_blank" rel="noopener">${escapeHtml(r.url)}</a></div>
+          <div class="result-snippet">${renderMarkdownSnippet(escapeHtml(r.snippet))}</div>
+          <div class="result-meta">
+            <span>Score: ${r.score}</span>
+            ${date ? `<span>${date}</span>` : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    // Pagination
+    if (data.total >= PAGE_SIZE || currentPage > 0) {
+      html += '<div class="pagination">';
+      html += `<button class="page-btn" onclick="window.__searchPage(${currentPage - 1})" ${currentPage === 0 ? 'disabled' : ''}>&laquo; Prev</button>`;
+      html += `<button class="page-btn active">${currentPage + 1}</button>`;
+      if (data.total >= PAGE_SIZE) {
+        html += `<button class="page-btn" onclick="window.__searchPage(${currentPage + 1})">Next &raquo;</button>`;
+      }
+      html += '</div>';
+    }
+
+    container.innerHTML = html;
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text || '';
+    return div.innerHTML;
+  }
+
+  window.__searchPage = function(page) {
+    if (page < 0) return;
+    currentPage = page;
+    doSearch();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    currentPage = 0;
+    doSearch();
+  });
+
+  // Re-search when filters change
+  [langSelect, sourceSelect, modeSelect].forEach(el => {
+    el.addEventListener('change', () => {
+      if (input.value.trim()) {
+        currentPage = 0;
+        doSearch();
+      }
+    });
+  });
+
+  restoreFromURL();
+})();
+</script>
 </body>
 </html>
