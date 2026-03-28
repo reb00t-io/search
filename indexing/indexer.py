@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import uuid
 from pathlib import Path
@@ -23,12 +22,12 @@ def _stable_uuid(doc_id: str) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_URL, doc_id))
 
 
-def create_collection(client: QdrantClient, embedding_dim: int):
-    """Create or recreate the Qdrant collection with dense + sparse vector configs."""
+def ensure_collection(client: QdrantClient, embedding_dim: int):
+    """Create the Qdrant collection if it doesn't exist."""
     collections = [c.name for c in client.get_collections().collections]
     if COLLECTION_NAME in collections:
-        logger.info("Deleting existing collection: %s", COLLECTION_NAME)
-        client.delete_collection(COLLECTION_NAME)
+        logger.info("Collection '%s' already exists", COLLECTION_NAME)
+        return False
 
     client.create_collection(
         collection_name=COLLECTION_NAME,
@@ -51,35 +50,31 @@ def create_collection(client: QdrantClient, embedding_dim: int):
     client.create_payload_index(COLLECTION_NAME, "doc_id", models.PayloadSchemaType.KEYWORD)
 
     logger.info("Created collection '%s' (dense=%d-dim + BM25 sparse)", COLLECTION_NAME, embedding_dim)
+    return True
 
 
-def index_documents(
+def index_records(
     client: QdrantClient,
-    data_dir: str | Path,
+    records: list[dict],
     bm25: BM25Encoder,
+    content_reader,
     embedding_model: str = "intfloat/multilingual-e5-base",
-):
-    """Read filtered documents and index into Qdrant."""
-    from ingestion.storage import ContentStore
+) -> int:
+    """Index a list of records into Qdrant. Returns count of indexed documents.
 
-    data_dir = Path(data_dir)
-    store = ContentStore(data_dir)
+    Args:
+        content_reader: callable(content_hash) -> str, reads content by hash
+    """
+    indexed = 0
 
-    # Load filtered records
-    filtered_path = data_dir / "filtered" / "documents.jsonl"
-    records = store.load_records(filtered_path)
-    logger.info("Indexing %d filtered documents", len(records))
-
-    # Process in batches
     for batch_start in range(0, len(records), BATCH_SIZE):
         batch_records = records[batch_start : batch_start + BATCH_SIZE]
 
-        # Load content for each record
         texts = []
         valid_records = []
         for record in batch_records:
             try:
-                text = store.read_content(record["content_hash"])
+                text = content_reader(record["content_hash"])
                 texts.append(text)
                 valid_records.append(record)
             except FileNotFoundError:
@@ -88,19 +83,14 @@ def index_documents(
         if not texts:
             continue
 
-        # Compute dense embeddings
         dense_vectors = embed_documents(texts, model_name=embedding_model)
-
-        # Compute sparse vectors (BM25)
         sparse_vectors = [bm25.encode_document(t) for t in texts]
 
-        # Build Qdrant points
         points = []
         for record, text, dense_vec, (sparse_indices, sparse_values) in zip(
             valid_records, texts, dense_vectors, sparse_vectors
         ):
             point_id = _stable_uuid(record["id"])
-            # Truncate text for snippet storage (keep full text for search but limit storage)
             snippet_text = text[:2000] if len(text) > 2000 else text
 
             payload = {
@@ -115,10 +105,7 @@ def index_documents(
                 "metadata": record.get("metadata", {}),
             }
 
-            vectors = {
-                "dense": dense_vec,
-            }
-
+            vectors = {"dense": dense_vec}
             sparse = {}
             if sparse_indices:
                 sparse["bm25"] = models.SparseVector(
@@ -133,11 +120,38 @@ def index_documents(
             ))
 
         client.upsert(collection_name=COLLECTION_NAME, points=points)
-        logger.info(
-            "Indexed batch %d-%d (%d points)",
-            batch_start,
-            batch_start + len(points),
-            len(points),
-        )
+        indexed += len(points)
+        logger.info("Indexed batch of %d points (%d total in this run)", len(points), indexed)
 
-    logger.info("Indexing complete: %d documents in collection '%s'", len(records), COLLECTION_NAME)
+    return indexed
+
+
+# Keep for backwards compatibility / full rebuild
+def create_collection(client: QdrantClient, embedding_dim: int):
+    """Drop and recreate collection (full rebuild)."""
+    collections = [c.name for c in client.get_collections().collections]
+    if COLLECTION_NAME in collections:
+        logger.info("Deleting existing collection: %s", COLLECTION_NAME)
+        client.delete_collection(COLLECTION_NAME)
+
+    ensure_collection(client, embedding_dim)
+
+
+def index_documents(
+    client: QdrantClient,
+    data_dir: str | Path,
+    bm25: BM25Encoder,
+    embedding_model: str = "intfloat/multilingual-e5-base",
+):
+    """Read all filtered documents and index into Qdrant (full rebuild)."""
+    from ingestion.storage import ContentStore
+
+    data_dir = Path(data_dir)
+    store = ContentStore(data_dir)
+
+    filtered_path = data_dir / "filtered" / "documents.jsonl"
+    records = store.load_records(filtered_path)
+    logger.info("Indexing %d filtered documents", len(records))
+
+    indexed = index_records(client, records, bm25, store.read_content, embedding_model)
+    logger.info("Indexing complete: %d documents in collection '%s'", indexed, COLLECTION_NAME)
