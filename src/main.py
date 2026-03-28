@@ -461,8 +461,14 @@ async def search_endpoint():
 
 
 if __name__ == "__main__":
+    import atexit
     import uvicorn
 
-    logger.info("search v%s (deployed %s)", VERSION, DEPLOY_DATE)
+    PID_FILE = Path(os.environ.get("PID_FILE", "data/search.pid"))
+    PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+    PID_FILE.write_text(str(os.getpid()))
+    atexit.register(lambda: PID_FILE.unlink(missing_ok=True))
+
+    logger.info("search v%s (deployed %s, pid %d)", VERSION, DEPLOY_DATE, os.getpid())
     port = int(os.environ["PORT"])
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")

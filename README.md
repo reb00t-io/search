@@ -79,9 +79,14 @@ python -m indexing.run --rebuild
 
 ```bash
 python src/main.py                # foreground (Ctrl+C to stop)
-python src/main.py &              # background
-pkill -f "python src/main.py"     # stop background server
+
+./scripts/server.sh start        # background (PID file at data/search.pid)
+./scripts/server.sh stop         # stop
+./scripts/server.sh restart      # restart
+./scripts/server.sh status       # check if running
 ```
+
+Logs are at `data/server.log` when running in background.
 
 ### All-in-one (background)
 
