@@ -101,6 +101,21 @@
 
     .filter-select:focus { border-color: #6366f1; }
 
+    .filter-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.8rem;
+      color: #475569;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .filter-checkbox input {
+      accent-color: #6366f1;
+      cursor: pointer;
+    }
+
     /* --- Status --- */
     .search-status {
       font-size: 0.8rem;
@@ -313,10 +328,10 @@
       <option value="bm25">BM25 only</option>
       <option value="vector">Vector only</option>
     </select>
-    <select class="filter-select" id="filter-groupby">
-      <option value="docs">Group by document</option>
-      <option value="chunks">All chunks</option>
-    </select>
+    <label class="filter-checkbox">
+      <input type="checkbox" id="filter-groupby" checked>
+      Group by document
+    </label>
   </div>
 
   <div id="results-container">
@@ -340,7 +355,7 @@
   const langSelect = document.getElementById('filter-lang');
   const sourceSelect = document.getElementById('filter-source');
   const modeSelect = document.getElementById('filter-mode');
-  const groupBySelect = document.getElementById('filter-groupby');
+  const groupByCheckbox = document.getElementById('filter-groupby');
 
   const PAGE_SIZE = 10;
   let currentPage = 0;
@@ -354,7 +369,7 @@
       langSelect.value = params.get('lang') || 'all';
       sourceSelect.value = params.get('source') || 'all';
       modeSelect.value = params.get('mode') || 'hybrid';
-      groupBySelect.value = params.get('group_by') || 'docs';
+      groupByCheckbox.checked = (params.get('group_by') || 'docs') === 'docs';
       currentPage = parseInt(params.get('page') || '0');
       doSearch();
     }
@@ -366,7 +381,7 @@
     if (langSelect.value !== 'all') params.set('lang', langSelect.value);
     if (sourceSelect.value !== 'all') params.set('source', sourceSelect.value);
     if (modeSelect.value !== 'hybrid') params.set('mode', modeSelect.value);
-    if (groupBySelect.value !== 'docs') params.set('group_by', groupBySelect.value);
+    if (!groupByCheckbox.checked) params.set('group_by', 'chunks');
     if (currentPage > 0) params.set('page', currentPage.toString());
     history.replaceState(null, '', '?' + params.toString());
   }
@@ -384,7 +399,7 @@
       lang: langSelect.value,
       source: sourceSelect.value,
       mode: modeSelect.value,
-      group_by: groupBySelect.value,
+      group_by: groupByCheckbox.checked ? 'docs' : 'chunks',
       limit: PAGE_SIZE.toString(),
       offset: (currentPage * PAGE_SIZE).toString(),
     });
@@ -473,7 +488,7 @@
   });
 
   // Re-search when filters change
-  [langSelect, sourceSelect, modeSelect, groupBySelect].forEach(el => {
+  [langSelect, sourceSelect, modeSelect, groupByCheckbox].forEach(el => {
     el.addEventListener('change', () => {
       if (input.value.trim()) {
         currentPage = 0;
