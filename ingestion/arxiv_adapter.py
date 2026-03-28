@@ -111,7 +111,7 @@ class ArxivAdapter(SourceAdapter):
             })
         return papers
 
-    def bulk_ingest(self, limit: int | None = None) -> Iterator[Document]:
+    def bulk_ingest(self, limit: int | None = None, known_ids: set[str] | None = None) -> Iterator[Document]:
         """Fetch recent papers from configured categories."""
         per_category = (limit or 50) // len(self.categories)
         per_category = max(per_category, 10)

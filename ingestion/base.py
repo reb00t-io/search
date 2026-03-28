@@ -26,8 +26,14 @@ class SourceAdapter:
 
     name: str = ""
 
-    def bulk_ingest(self, limit: int | None = None) -> Iterator[Document]:
-        """Initial/periodic full ingestion. Yields Documents."""
+    def bulk_ingest(self, limit: int | None = None, known_ids: set[str] | None = None) -> Iterator[Document]:
+        """Initial/periodic full ingestion. Yields Documents.
+
+        Args:
+            known_ids: Set of already-ingested document IDs. Adapters may use
+                       this to skip expensive fetches for content that would be
+                       deduplicated anyway.
+        """
         raise NotImplementedError
 
     def stream_updates(self) -> Iterator[Document]:

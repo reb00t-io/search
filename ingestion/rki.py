@@ -121,7 +121,7 @@ class RkiAdapter(SourceAdapter):
 
         return records, next_token
 
-    def bulk_ingest(self, limit: int | None = None) -> Iterator[Document]:
+    def bulk_ingest(self, limit: int | None = None, known_ids: set[str] | None = None) -> Iterator[Document]:
         """Fetch all RKI publications via OAI-PMH."""
         doc_count = 0
         token = None

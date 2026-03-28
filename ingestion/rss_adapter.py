@@ -155,7 +155,7 @@ class RssAdapter(SourceAdapter):
             logger.debug("Failed to fetch article %s: %s", url, e)
             return ""
 
-    def bulk_ingest(self, limit: int | None = None) -> Iterator[Document]:
+    def bulk_ingest(self, limit: int | None = None, known_ids: set[str] | None = None) -> Iterator[Document]:
         """Fetch articles from all configured RSS feeds."""
         seen_urls = set()
         doc_count = 0

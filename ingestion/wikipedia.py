@@ -156,12 +156,49 @@ class WikipediaAdapter(SourceAdapter):
             logger.warning("Failed to fetch %s:%s: %s", lang, title, e)
             return None
 
-    def bulk_ingest(self, limit: int | None = None) -> Iterator[Document]:
+    def _resolve_page_ids(self, lang: str, titles: list[str]) -> dict[str, int]:
+        """Batch-resolve page IDs for titles (50 at a time, no content fetched)."""
+        result = {}
+        for i in range(0, len(titles), 50):
+            batch = titles[i : i + 50]
+            params = {
+                "action": "query", "titles": "|".join(batch),
+                "format": "json", "formatversion": "2",
+            }
+            try:
+                resp = self.client.get(self._api_url(lang), params=params)
+                resp.raise_for_status()
+                for page in resp.json().get("query", {}).get("pages", []):
+                    if not page.get("missing"):
+                        result[page["title"]] = page["pageid"]
+            except Exception as e:
+                logger.warning("Failed to resolve page IDs for %s: %s", lang, e)
+        return result
+
+    def bulk_ingest(self, limit: int | None = None, known_ids: set[str] | None = None) -> Iterator[Document]:
         """Fetch seed articles from Wikipedia API."""
+        known_ids = known_ids or set()
+        known_prefixes = {":".join(kid.split(":")[:3]) for kid in known_ids if kid.startswith("wiki:")}
+
         for lang in self.languages:
             titles = SEED_ARTICLES.get(lang, [])
             if limit:
                 titles = titles[: limit // len(self.languages)]
+
+            # Batch-resolve page IDs to skip known articles without fetching content
+            if known_prefixes:
+                title_to_pid = self._resolve_page_ids(lang, titles)
+                # Build reverse map: seed_title -> page_id (handle title normalization)
+                pid_by_seed = {}
+                for seed_title in titles:
+                    # Try exact match, then with spaces
+                    pid = title_to_pid.get(seed_title) or title_to_pid.get(seed_title.replace("_", " "))
+                    if pid is not None:
+                        pid_by_seed[seed_title] = pid
+                before = len(titles)
+                titles = [t for t in titles if f"wiki:{lang}:{pid_by_seed.get(t, -1)}" not in known_prefixes]
+                if before > len(titles):
+                    logger.info("  %s %s: skipping %d known articles, %d remaining", self.name, lang, before - len(titles), len(titles))
 
             for title in titles:
                 page = self._fetch_article(lang, title)

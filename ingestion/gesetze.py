@@ -140,7 +140,7 @@ class GesetzeAdapter(SourceAdapter):
             logger.warning("Failed to fetch %s: %s", zip_url, e)
             return None
 
-    def bulk_ingest(self, limit: int | None = None) -> Iterator[Document]:
+    def bulk_ingest(self, limit: int | None = None, known_ids: set[str] | None = None) -> Iterator[Document]:
         """Fetch laws from gesetze-im-internet.de."""
         toc = self._fetch_toc()
         logger.info("Found %d laws in TOC", len(toc))

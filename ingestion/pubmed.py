@@ -184,7 +184,7 @@ class PubmedAdapter(SourceAdapter):
 
         return articles
 
-    def bulk_ingest(self, limit: int | None = None) -> Iterator[Document]:
+    def bulk_ingest(self, limit: int | None = None, known_ids: set[str] | None = None) -> Iterator[Document]:
         """Fetch articles from PubMed across multiple search queries."""
         per_query = max((limit or 50) // len(self.queries), 5)
         seen_pmids = set()
