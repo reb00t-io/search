@@ -1,5 +1,37 @@
 # TODO
 
+## MVP Source Coverage
+
+Current sources: Wikipedia (DE+EN), arXiv, gesetze-im-internet.de, PubMed
+
+Sources to add for reasonable MVP coverage:
+
+### News
+- [ ] **Tagesschau.de** — ARD's public news, RSS feeds available, German-language
+- [ ] **DW (Deutsche Welle)** — German + English, RSS + API, international perspective
+- [ ] **Wikinews** (DE+EN) — free content, same MediaWiki API as Wikipedia
+
+### Health
+- [ ] **WHO fact sheets** — structured HTML, ~400 topics, authoritative
+- [ ] **RKI (Robert Koch Institut)** — German public health, publications + reports
+- [ ] **Gesundheitsinformation.de** (IQWiG) — evidence-based health info in German
+
+### Law / Government
+- [ ] **EUR-Lex** — EU legislation, bulk download available, DE+EN
+- [ ] **Bundesgesetzblatt** — official gazette, complements gesetze-im-internet.de
+- [ ] **Verwaltungsvorschriften** — administrative regulations
+
+### Coding / Tech
+- [ ] **Stack Overflow data dump** — quarterly CC-licensed dump, Q&A format
+- [ ] **Python docs / MDN Web Docs** — structured, high quality, agents query these often
+- [ ] **Linux man pages** — available as structured text
+- [ ] **Arch Wiki** — high-quality Linux/sysadmin docs, CC-licensed, MediaWiki API
+
+### Reference / General
+- [ ] **Wiktionary (DE+EN)** — definitions, translations, same MediaWiki API
+- [ ] **Simple English Wikipedia** — concise factual answers
+- [ ] **OpenStreetMap wiki** — geographic/place data
+
 ## Ingestion
 - [ ] arXiv: full-text extraction (currently abstracts only). Use ar5iv HTML versions where available, fall back to LaTeX/pandoc conversion.
 - [ ] Wikipedia: switch from API to dump-based ingestion for full corpus

@@ -15,6 +15,8 @@ import logging
 
 from ingestion.arxiv_adapter import ArxivAdapter
 from ingestion.cursor import IdCursor
+from ingestion.gesetze import GesetzeAdapter
+from ingestion.pubmed import PubmedAdapter
 from ingestion.storage import ContentStore
 from ingestion.wikipedia import WikipediaAdapter
 
@@ -24,6 +26,8 @@ logger = logging.getLogger(__name__)
 ADAPTERS = {
     "wiki": WikipediaAdapter,
     "arxiv": ArxivAdapter,
+    "gesetze": GesetzeAdapter,
+    "pubmed": PubmedAdapter,
 }
 
 
@@ -31,7 +35,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run ingestion pipeline")
     parser.add_argument("--limit", type=int, default=100, help="Max NEW documents per source per run")
     parser.add_argument("--data-dir", default="data", help="Data directory")
-    parser.add_argument("--sources", default="wiki,arxiv", help="Comma-separated source names")
+    parser.add_argument("--sources", default="wiki,arxiv,gesetze,pubmed", help="Comma-separated source names")
     args = parser.parse_args()
 
     store = ContentStore(args.data_dir)
