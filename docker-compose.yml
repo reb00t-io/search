@@ -1,0 +1,13 @@
+services:
+  search:
+    image: search
+    environment:
+      - PORT=${PORT}
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - API_KEY=${API_KEY}
+      - SESSIONS_PATH=/data/sessions.json
+    ports:
+      - "${PORT}:${PORT}"
+    volumes:
+      - ${HOME}/.bootstrap-template/data:/data
