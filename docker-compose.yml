@@ -1,9 +1,6 @@
 services:
   qdrant:
     image: qdrant/qdrant:latest
-    ports:
-      - "6333:6333"
-      - "6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
     restart: unless-stopped
@@ -15,14 +12,49 @@ services:
       - LLM_BASE_URL=${LLM_BASE_URL}
       - LLM_API_KEY=${LLM_API_KEY}
       - API_KEY=${API_KEY}
+      - AUTH_MODE=${AUTH_MODE:-none}
+      - AUTH_PASSWORD=${AUTH_PASSWORD:-}
       - QDRANT_URL=http://qdrant:6333
       - SESSIONS_PATH=/data/sessions.json
+      - REQUEST_LOG_PATH=/data/requests.log
+      - PID_FILE=/data/search.pid
     ports:
       - "${PORT}:${PORT}"
     volumes:
-      - ${HOME}/.bootstrap-template/data:/data
+      - search_data:/data
     depends_on:
       - qdrant
+    restart: unless-stopped
+
+  ingestion:
+    image: search
+    command: ["python", "-m", "ingestion.run", "--data-dir", "/data"]
+    volumes:
+      - search_data:/data
+    restart: unless-stopped
+
+  filtering:
+    image: search
+    command: ["python", "-m", "filtering.run", "--data-dir", "/data"]
+    volumes:
+      - search_data:/data
+    depends_on:
+      - ingestion
+    restart: unless-stopped
+
+  indexing:
+    image: search
+    command: ["python", "-m", "indexing.run", "--data-dir", "/data", "--qdrant-url", "http://qdrant:6333"]
+    environment:
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - LLM_API_KEY=${LLM_API_KEY}
+    volumes:
+      - search_data:/data
+    depends_on:
+      - qdrant
+      - filtering
+    restart: unless-stopped
 
 volumes:
   qdrant_data:
+  search_data:

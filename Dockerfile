@@ -4,15 +4,17 @@ WORKDIR /app
 COPY pyproject.toml VERSION ./
 COPY config/ ./config/
 COPY docs/ ./docs/
-COPY src/ .
+COPY src/ ./src/
+COPY serving/ ./serving/
+COPY ingestion/ ./ingestion/
+COPY filtering/ ./filtering/
+COPY indexing/ ./indexing/
 RUN pip install --no-cache-dir .
 ARG DEPLOY_DATE=unknown
 ENV DEPLOY_DATE=$DEPLOY_DATE
-ARG PORT
-ENV PORT=$PORT
 
-RUN useradd --create-home appuser
+RUN useradd --create-home appuser && mkdir -p /data && chown appuser:appuser /data
 USER appuser
 
-EXPOSE $PORT
-CMD ["python", "main.py"]
+# Default: web server. Override via docker-compose command.
+CMD ["python", "src/main.py"]

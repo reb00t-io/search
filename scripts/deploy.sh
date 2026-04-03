@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Deploy script for bootstrap-template
-# This script handles building, saving, uploading, and starting the Docker container.
-# It also checks the public endpoint and prints diagnostics on failure.
+# Deploy script: builds image locally, uploads to remote, runs via docker-compose.
 
 REMOTE_HOST="test.k3rnel-pan1c.com"
 REMOTE_PORT=2223
 REMOTE_USER="marko"
 IMAGE_NAME="search"
 REMOTE="$REMOTE_USER@$REMOTE_HOST"
+REMOTE_DIR="\$HOME/search"
 SSH_OPTS=(-p "$REMOTE_PORT" -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3)
 : "${PUBLIC_URL:?PUBLIC_URL must be set}"
 : "${LLM_BASE_URL:?LLM_BASE_URL must be set}"
@@ -19,28 +18,34 @@ SSH_OPTS=(-p "$REMOTE_PORT" -o ConnectTimeout=10 -o ServerAliveInterval=5 -o Ser
 : "${AUTH_PASSWORD:?AUTH_PASSWORD must be set}"
 
 print_remote_diagnostics() {
+  echo "    remote diagnostics:"
   ssh "${SSH_OPTS[@]}" "$REMOTE" '
-    docker ps -a --filter "name=bootstrap-template" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+    cd ~/search 2>/dev/null || true
+    docker compose ps 2>/dev/null || true
     echo
-    docker logs --tail 80 bootstrap-template 2>/dev/null || true
+    docker compose logs --tail 40 search 2>/dev/null || true
   ' || true
 }
 
+# --- Build ---
 printf "==> building image ($IMAGE_NAME, linux/amd64)..."
 if [ "${SKIP_DOCKER_BUILD:-0}" != "1" ]; then
   ./scripts/build.sh linux/amd64 > /dev/null 2>&1
 fi
 echo "ok"
 
+# --- Save & upload ---
 printf "==> saving image..."
 docker save "$IMAGE_NAME" | gzip > /tmp/"${IMAGE_NAME}".tar.gz
 echo "ok"
 
 printf "==> uploading to $REMOTE_HOST..."
-scp -P "$REMOTE_PORT" -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 /tmp/"${IMAGE_NAME}".tar.gz "$REMOTE":/tmp/"${IMAGE_NAME}".tar.gz
+scp -P "$REMOTE_PORT" -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 \
+  /tmp/"${IMAGE_NAME}".tar.gz "$REMOTE":/tmp/"${IMAGE_NAME}".tar.gz
 rm /tmp/"${IMAGE_NAME}".tar.gz
 echo "ok"
 
+# --- Load image on remote ---
 printf "==> loading image on remote..."
 ssh "${SSH_OPTS[@]}" "$REMOTE" '
   docker load < /tmp/'"${IMAGE_NAME}"'.tar.gz
@@ -48,52 +53,44 @@ ssh "${SSH_OPTS[@]}" "$REMOTE" '
 ' > /dev/null 2>&1
 echo "ok"
 
-printf "==> ensuring remote data dir..."
-ssh "${SSH_OPTS[@]}" "$REMOTE" 'mkdir -p "$HOME/.bootstrap-template/data"' > /dev/null 2>&1
+# --- Upload docker-compose.yml ---
+printf "==> uploading compose file..."
+ssh "${SSH_OPTS[@]}" "$REMOTE" "mkdir -p ~/search"
+scp -P "$REMOTE_PORT" -o ConnectTimeout=10 docker-compose.yml "$REMOTE":~/search/docker-compose.yml
 echo "ok"
-printf "==> starting container..."
-printf -v image_name_q '%q' "$IMAGE_NAME"
+
+# --- Write .env on remote ---
+printf "==> writing remote .env..."
 printf -v port_q '%q' "$PORT"
 printf -v llm_base_url_q '%q' "$LLM_BASE_URL"
 printf -v llm_api_key_q '%q' "$LLM_API_KEY"
 printf -v api_key_q '%q' "$API_KEY"
 printf -v auth_password_q '%q' "$AUTH_PASSWORD"
-if ! container_id=$(ssh "${SSH_OPTS[@]}" "$REMOTE" 'bash -se' <<EOF
-set -euo pipefail
-image_name=$image_name_q
-port=$port_q
-llm_base_url=$llm_base_url_q
-llm_api_key=$llm_api_key_q
-api_key=$api_key_q
-auth_password=$auth_password_q
-data_dir="\$HOME/.bootstrap-template/data"
-
-docker stop --time 2 "\$image_name" 2>/dev/null || true
-docker rm "\$image_name" 2>/dev/null || true
-docker run -d \
-  -p "\$port:\$port" \
-  -e PORT="\$port" \
-  -e LLM_BASE_URL="\$llm_base_url" \
-  -e LLM_API_KEY="\$llm_api_key" \
-  -e API_KEY="\$api_key" \
-  -e AUTH_MODE=password \
-  -e AUTH_PASSWORD="\$auth_password" \
-  -e SESSIONS_PATH=/data/sessions.json \
-  -v "\$data_dir:/data" \
-  --name "\$image_name" \
-  --restart unless-stopped \
-  "\$image_name"
+ssh "${SSH_OPTS[@]}" "$REMOTE" 'bash -se' <<EOF
+cat > ~/search/.env <<'ENVEOF'
+PORT=$port_q
+LLM_BASE_URL=$llm_base_url_q
+LLM_API_KEY=$llm_api_key_q
+API_KEY=$api_key_q
+AUTH_MODE=password
+AUTH_PASSWORD=$auth_password_q
+ENVEOF
 EOF
-)
-then
+echo "ok"
+
+# --- Start services ---
+printf "==> starting services..."
+if ! ssh "${SSH_OPTS[@]}" "$REMOTE" '
+  cd ~/search
+  docker compose up -d --remove-orphans
+'; then
   echo "FAIL"
-  echo "    remote container start failed"
-  echo "    remote diagnostics:"
   print_remote_diagnostics
   exit 1
 fi
-echo "started (${container_id:0:12})"
+echo "ok"
 
+# --- Wait for server ---
 printf "==> waiting for server..."
 WAIT_TIMEOUT_SECONDS="${WAIT_TIMEOUT_SECONDS:-120}"
 WAIT_INTERVAL_SECONDS="${WAIT_INTERVAL_SECONDS:-2}"
@@ -111,12 +108,12 @@ done
 if [[ "$server_ready" != true ]]; then
   echo "FAIL"
   echo "    server did not start within ${WAIT_TIMEOUT_SECONDS}s"
-  echo "    remote diagnostics:"
   print_remote_diagnostics
   exit 1
 fi
 echo "server reachable"
 
+# --- Check public endpoint ---
 printf "==> checking public endpoint ($PUBLIC_URL)..."
 if ! body=$(curl -sfL --max-time 10 "$PUBLIC_URL"); then
   echo "FAIL"
@@ -124,7 +121,7 @@ if ! body=$(curl -sfL --max-time 10 "$PUBLIC_URL"); then
   exit 1
 fi
 
-if ! echo "$body" | grep -qE "hello|Sign in"; then
+if ! echo "$body" | grep -qE "Search|hello|Sign in"; then
   echo "FAIL"
   echo "    $PUBLIC_URL response did not look right"
   echo "    $body"
@@ -132,6 +129,7 @@ if ! echo "$body" | grep -qE "hello|Sign in"; then
 fi
 echo "ok"
 
+# --- Fetch logs ---
 ./scripts/get_logs.sh
 
 echo "==> deployed $IMAGE_NAME to $PUBLIC_URL"

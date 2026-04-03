@@ -23,7 +23,7 @@ print_attempt_message() {
 }
 
 fetch_logs_once() {
-    ssh "${SSH_OPTS[@]}" "$REMOTE" "docker logs -t \"$IMAGE_NAME\"" 2>&1
+    ssh "${SSH_OPTS[@]}" "$REMOTE" "cd ~/search && docker compose logs --tail 80 -t" 2>&1
 }
 
 fetch_logs_with_retries() {
