@@ -80,7 +80,7 @@ printf -v llm_base_url_q '%q' "$LLM_BASE_URL"
 printf -v llm_api_key_q '%q' "$LLM_API_KEY"
 printf -v api_key_q '%q' "$API_KEY"
 printf -v auth_password_q '%q' "$AUTH_PASSWORD"
-ssh "${SSH_OPTS[@]}" "$REMOTE" 'bash -se' <<EOF
+retry_cmd 3 2 ssh "${SSH_OPTS[@]}" "$REMOTE" 'bash -se' <<EOF
 cat > ~/search/.env <<'ENVEOF'
 PORT=$port_q
 LLM_BASE_URL=$llm_base_url_q
@@ -94,7 +94,7 @@ echo "ok"
 
 # --- Start services ---
 printf "==> starting services..."
-if ! ssh "${SSH_OPTS[@]}" "$REMOTE" '
+if ! retry_cmd 3 4 ssh "${SSH_OPTS[@]}" "$REMOTE" '
   cd ~/search
   docker compose up -d --remove-orphans
 '; then
