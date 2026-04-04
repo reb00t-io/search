@@ -484,6 +484,86 @@ async def search_endpoint():
     return jsonify(result)
 
 
+def _get_index_stats():
+    """Collect current index statistics."""
+    from collections import Counter
+    from indexing.indexer import COLLECTION_NAME
+
+    data_dir = Path(os.environ.get("DATA_DIR", "data"))
+    stats = {}
+
+    # Qdrant collection info
+    try:
+        info = _search_client.get_collection(COLLECTION_NAME)
+        stats["indexed_points"] = info.points_count or 0
+        stats["segments"] = info.segments_count or 0
+    except Exception:
+        stats["indexed_points"] = 0
+        stats["segments"] = 0
+
+    # Count documents from filtered JSONL
+    filtered_path = data_dir / "filtered" / "documents.jsonl"
+    source_counts: Counter = Counter()
+    ct_counts: Counter = Counter()
+    if filtered_path.exists():
+        for line in filtered_path.read_text().strip().splitlines():
+            if not line.strip():
+                continue
+            try:
+                rec = json.loads(line)
+                source_counts[rec.get("source", "?")] += 1
+                ct_counts[rec.get("content_type", "full_text")] += 1
+            except json.JSONDecodeError:
+                pass
+
+    stats["documents"] = sum(source_counts.values())
+    stats["full_text"] = ct_counts.get("full_text", 0)
+    stats["abstracts"] = ct_counts.get("abstract", 0)
+    stats["by_source"] = dict(sorted(source_counts.items()))
+
+    # Sizes
+    def _dir_size(p: Path) -> int:
+        return sum(f.stat().st_size for f in p.rglob("*") if f.is_file()) if p.exists() else 0
+
+    stats["content_bytes"] = _dir_size(data_dir / "content")
+    stats["data_bytes"] = _dir_size(data_dir)
+
+    return stats
+
+
+@app.route("/v1/stats", methods=["GET"])
+async def stats_api():
+    if not _init_search():
+        return jsonify({"error": "Search not available"}), 503
+    return jsonify(_get_index_stats())
+
+
+@app.route("/stats")
+async def stats_page():
+    if not _is_authenticated():
+        return redirect(url_for("login"))
+
+    # Load history
+    data_dir = Path(os.environ.get("DATA_DIR", "data"))
+    history_path = data_dir / "stats" / "history.jsonl"
+    history = []
+    if history_path.exists():
+        for line in history_path.read_text().strip().splitlines():
+            if not line.strip():
+                continue
+            try:
+                history.append(json.loads(line))
+            except json.JSONDecodeError:
+                pass
+
+    return await render_template(
+        "stats.html",
+        version=VERSION,
+        deploy_date=DEPLOY_DATE,
+        history_json=json.dumps(history),
+    )
+
+
 if __name__ == "__main__":
     import atexit
     import uvicorn

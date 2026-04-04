@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+  <title>Stats - Search</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      background: #f8f9fa;
+      color: #1a1a2e;
+    }
+
+    .container {
+      max-width: 840px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
+    }
+
+    .header {
+      padding: 2rem 0 1.5rem;
+    }
+
+    .header h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: #0f0f23;
+      margin-bottom: 0.25rem;
+    }
+
+    .header .meta {
+      font-size: 0.75rem;
+      color: #94a3b8;
+      margin-bottom: 0.5rem;
+    }
+
+    .header nav {
+      font-size: 0.85rem;
+    }
+
+    .header nav a {
+      color: #6366f1;
+      text-decoration: none;
+    }
+
+    .header nav a:hover { text-decoration: underline; }
+
+    /* Stats cards */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 2rem;
+    }
+
+    .stat-card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+    }
+
+    .stat-card .label {
+      font-size: 0.75rem;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.25rem;
+    }
+
+    .stat-card .value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #0f0f23;
+    }
+
+    .stat-card .delta {
+      font-size: 0.75rem;
+      margin-top: 0.15rem;
+    }
+
+    .delta.positive { color: #16a34a; }
+    .delta.negative { color: #ef4444; }
+    .delta.neutral { color: #94a3b8; }
+
+    /* Source breakdown */
+    .section {
+      margin-bottom: 2rem;
+    }
+
+    .section h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #0f0f23;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .source-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 0.5rem;
+    }
+
+    .source-item {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+    }
+
+    .source-item .name {
+      font-size: 0.8rem;
+      color: #475569;
+      font-weight: 600;
+    }
+
+    .source-item .count {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #0f0f23;
+    }
+
+    .source-item .delta {
+      font-size: 0.7rem;
+    }
+
+    /* Chart */
+    .chart-container {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 1.25rem;
+      margin-bottom: 2rem;
+    }
+
+    .chart-container canvas {
+      width: 100% !important;
+      max-height: 320px;
+    }
+
+    .no-history {
+      text-align: center;
+      padding: 2rem;
+      color: #94a3b8;
+      font-size: 0.875rem;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 2rem;
+      color: #94a3b8;
+    }
+
+    .error {
+      text-align: center;
+      padding: 1rem;
+      color: #ef4444;
+      font-size: 0.875rem;
+    }
+
+    .footer {
+      text-align: center;
+      padding: 2rem 0 1rem;
+      font-size: 0.75rem;
+      color: #cbd5e1;
+    }
+
+    @media (max-width: 600px) {
+      .container { padding: 1rem; }
+      .header { padding: 1.5rem 0 1rem; }
+      .header h1 { font-size: 1.25rem; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .stat-card .value { font-size: 1.25rem; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header class="header">
+    <p class="meta">{{ deploy_date }}</p>
+    <h1>Index Stats</h1>
+    <nav><a href="/">Search</a> &middot; <a href="/chat">Chat</a> &middot; <a href="/todo">Todo</a></nav>
+  </header>
+
+  <div id="stats-content">
+    <div class="loading">Loading stats...</div>
+  </div>
+
+  <div class="section">
+    <h2>History</h2>
+    <div class="chart-container" id="chart-section" style="display:none;">
+      <canvas id="stats-chart"></canvas>
+    </div>
+    <div class="no-history" id="no-history">No history data yet. Stats are collected daily at 06:30.</div>
+  </div>
+
+  <footer class="footer">v{{ version }} &middot; deployed {{ deploy_date }}</footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+  const history = {{ history_json | safe }};
+
+  // ─── Fetch live stats ──────────────────────────────────────────────────────
+  async function loadStats() {
+    const container = document.getElementById('stats-content');
+    try {
+      const res = await fetch('/v1/stats');
+      if (!res.ok) throw new Error('Stats not available');
+      const stats = await res.json();
+      renderStats(stats);
+    } catch (err) {
+      container.innerHTML = `<div class="error">${err.message}</div>`;
+    }
+  }
+
+  function fmtBytes(b) {
+    if (b >= 1 << 30) return (b / (1 << 30)).toFixed(2) + ' GB';
+    if (b >= 1 << 20) return (b / (1 << 20)).toFixed(1) + ' MB';
+    if (b >= 1 << 10) return (b / (1 << 10)).toFixed(0) + ' KB';
+    return b + ' B';
+  }
+
+  function fmtNum(n) {
+    return n.toLocaleString();
+  }
+
+  function deltaHtml(current, previous) {
+    if (previous === undefined || previous === null) return '';
+    const diff = current - previous;
+    if (diff === 0) return '<span class="delta neutral">no change</span>';
+    const sign = diff > 0 ? '+' : '';
+    const cls = diff > 0 ? 'positive' : 'negative';
+    return `<span class="delta ${cls}">${sign}${fmtNum(diff)}</span>`;
+  }
+
+  function deltaBytesHtml(current, previous) {
+    if (previous === undefined || previous === null) return '';
+    const diff = current - previous;
+    if (diff === 0) return '<span class="delta neutral">no change</span>';
+    const sign = diff > 0 ? '+' : '';
+    const cls = diff > 0 ? 'positive' : 'negative';
+    return `<span class="delta ${cls}">${sign}${fmtBytes(Math.abs(diff))}</span>`;
+  }
+
+  function renderStats(stats) {
+    const prev = history.length > 0 ? history[history.length - 1] : null;
+    const container = document.getElementById('stats-content');
+
+    let html = '<div class="stats-grid">';
+    html += card('Documents', fmtNum(stats.documents), deltaHtml(stats.documents, prev?.documents));
+    html += card('Indexed Points', fmtNum(stats.indexed_points), deltaHtml(stats.indexed_points, prev?.indexed_points));
+    html += card('Full Text', fmtNum(stats.full_text), deltaHtml(stats.full_text, prev?.full_text));
+    html += card('Abstracts', fmtNum(stats.abstracts), deltaHtml(stats.abstracts, prev?.abstracts));
+    html += card('Content Size', fmtBytes(stats.content_bytes), deltaBytesHtml(stats.content_bytes, prev?.content_bytes));
+    html += card('Data Size', fmtBytes(stats.data_bytes), deltaBytesHtml(stats.data_bytes, prev?.data_bytes));
+    html += '</div>';
+
+    // Source breakdown
+    if (stats.by_source && Object.keys(stats.by_source).length > 0) {
+      html += '<div class="section"><h2>By Source</h2><div class="source-list">';
+      for (const [src, count] of Object.entries(stats.by_source)) {
+        const prevCount = prev?.by_source?.[src];
+        html += `<div class="source-item">
+          <div class="name">${escapeHtml(src)}</div>
+          <div class="count">${fmtNum(count)}</div>
+          ${deltaHtml(count, prevCount)}
+        </div>`;
+      }
+      html += '</div></div>';
+    }
+
+    container.innerHTML = html;
+  }
+
+  function card(label, value, delta) {
+    return `<div class="stat-card">
+      <div class="label">${label}</div>
+      <div class="value">${value}</div>
+      ${delta}
+    </div>`;
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text || '';
+    return div.innerHTML;
+  }
+
+  // ─── Chart ─────────────────────────────────────────────────────────────────
+  function renderChart() {
+    if (history.length < 2) return;
+
+    document.getElementById('no-history').style.display = 'none';
+    document.getElementById('chart-section').style.display = '';
+
+    const labels = history.map(h => {
+      const d = new Date(h.timestamp);
+      return d.toLocaleDateString('de-DE', { month: 'short', day: 'numeric' });
+    });
+
+    const ctx = document.getElementById('stats-chart').getContext('2d');
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Documents',
+            data: history.map(h => h.documents),
+            borderColor: '#6366f1',
+            backgroundColor: 'rgba(99, 102, 241, 0.08)',
+            fill: true,
+            tension: 0.3,
+          },
+          {
+            label: 'Indexed Points',
+            data: history.map(h => h.indexed_points),
+            borderColor: '#22c55e',
+            backgroundColor: 'rgba(34, 197, 94, 0.08)',
+            fill: true,
+            tension: 0.3,
+          },
+          {
+            label: 'Content (MB)',
+            data: history.map(h => +(h.content_bytes / (1 << 20)).toFixed(1)),
+            borderColor: '#f59e0b',
+            backgroundColor: 'rgba(245, 158, 11, 0.08)',
+            fill: false,
+            tension: 0.3,
+            yAxisID: 'y1',
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 12, padding: 16 } },
+        },
+        scales: {
+          y: {
+            position: 'left',
+            beginAtZero: true,
+            title: { display: true, text: 'Count' },
+          },
+          y1: {
+            position: 'right',
+            beginAtZero: true,
+            title: { display: true, text: 'MB' },
+            grid: { drawOnChartArea: false },
+          },
+        },
+      },
+    });
+  }
+
+  loadStats();
+  renderChart();
+})();
+</script>
+</body>
+</html>
