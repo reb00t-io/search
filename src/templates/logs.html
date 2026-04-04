@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+  <title>Pipeline Logs - Search</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      background: #f8f9fa;
+      color: #1a1a2e;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
+    }
+
+    .header {
+      padding: 2rem 0 1.5rem;
+    }
+
+    .header h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: #0f0f23;
+      margin-bottom: 0.25rem;
+    }
+
+    .header .meta {
+      font-size: 0.75rem;
+      color: #64748b;
+      margin-bottom: 0.5rem;
+    }
+
+    .header nav {
+      font-size: 0.85rem;
+    }
+
+    .header nav a {
+      color: #6366f1;
+      text-decoration: none;
+    }
+
+    .header nav a:hover { text-decoration: underline; }
+
+    /* Totals bar */
+    .totals {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    .total-badge {
+      font-size: 0.8rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 8px;
+      font-weight: 600;
+    }
+
+    .total-badge.ingested { background: #dbeafe; color: #1e40af; }
+    .total-badge.filtered { background: #dcfce7; color: #166534; }
+    .total-badge.rejected { background: #fef3c7; color: #92400e; }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 1rem;
+      border-bottom: 2px solid #e2e8f0;
+    }
+
+    .tab-btn {
+      padding: 0.5rem 1rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      border: none;
+      background: none;
+      color: #94a3b8;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      transition: color 0.15s;
+    }
+
+    .tab-btn:hover { color: #475569; }
+    .tab-btn.active { color: #6366f1; border-bottom-color: #6366f1; }
+
+    /* Log entries */
+    .log-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .log-entry {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 0.65rem 0.85rem;
+      font-size: 0.8rem;
+      line-height: 1.5;
+    }
+
+    .log-entry .log-title {
+      font-weight: 600;
+      color: #1e293b;
+      margin-bottom: 0.15rem;
+      word-break: break-word;
+    }
+
+    .log-entry .log-meta {
+      color: #64748b;
+      font-size: 0.75rem;
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .log-entry .log-meta .source-tag {
+      font-weight: 600;
+    }
+
+    .log-entry.rejected {
+      border-left: 3px solid #f59e0b;
+    }
+
+    .log-entry .rejection-reason {
+      color: #92400e;
+      font-size: 0.75rem;
+      margin-top: 0.15rem;
+    }
+
+    .empty {
+      text-align: center;
+      padding: 2rem;
+      color: #94a3b8;
+      font-size: 0.875rem;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 2rem;
+      color: #94a3b8;
+    }
+
+    .footer {
+      text-align: center;
+      padding: 2rem 0 1rem;
+      font-size: 0.75rem;
+      color: #64748b;
+    }
+
+    @media (max-width: 600px) {
+      .container { padding: 1rem; }
+      .header { padding: 1.5rem 0 1rem; }
+      .header h1 { font-size: 1.25rem; }
+      .totals { gap: 0.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header class="header">
+    <p class="meta">{{ deploy_date }}</p>
+    <h1>Pipeline Logs</h1>
+    <nav><a href="/">Search</a> &middot; <a href="/chat">Chat</a> &middot; <a href="/stats">Stats</a> &middot; <a href="/todo">Todo</a></nav>
+  </header>
+
+  <div class="totals" id="totals"></div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="ingested">Ingested</button>
+    <button class="tab-btn" data-tab="filtered">Filtered</button>
+    <button class="tab-btn" data-tab="rejected">Rejected</button>
+  </div>
+
+  <div id="log-content">
+    <div class="loading">Loading pipeline data...</div>
+  </div>
+
+  <footer class="footer">v{{ version }} &middot; deployed {{ deploy_date }}</footer>
+</div>
+
+<script>
+(function() {
+  let data = null;
+  let activeTab = 'ingested';
+
+  const tabs = document.querySelectorAll('.tab-btn');
+  tabs.forEach(btn => {
+    btn.addEventListener('click', () => {
+      tabs.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeTab = btn.dataset.tab;
+      renderTab();
+    });
+  });
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text || '';
+    return div.innerHTML;
+  }
+
+  function fmtTime(ts) {
+    if (!ts) return '';
+    try {
+      const d = new Date(ts);
+      return d.toLocaleString('de-DE', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } catch { return ts; }
+  }
+
+  function renderTotals() {
+    const el = document.getElementById('totals');
+    el.innerHTML = `
+      <span class="total-badge ingested">Ingested: ${(data.ingested_total || 0).toLocaleString()}</span>
+      <span class="total-badge filtered">Filtered: ${(data.filtered_total || 0).toLocaleString()}</span>
+      <span class="total-badge rejected">Rejected: ${(data.rejected_total || 0).toLocaleString()}</span>
+    `;
+  }
+
+  function renderTab() {
+    const container = document.getElementById('log-content');
+    const key = activeTab + '_recent';
+    const entries = data[key] || [];
+
+    if (entries.length === 0) {
+      container.innerHTML = '<div class="empty">No entries yet.</div>';
+      return;
+    }
+
+    // Show most recent first
+    const reversed = [...entries].reverse();
+    let html = '<div class="log-list">';
+
+    for (const entry of reversed) {
+      const isRejected = activeTab === 'rejected';
+      html += `<div class="log-entry${isRejected ? ' rejected' : ''}">`;
+      html += `<div class="log-title">${escapeHtml(entry.title || entry.id || 'Untitled')}</div>`;
+      html += '<div class="log-meta">';
+      if (entry.source) html += `<span class="source-tag">${escapeHtml(entry.source)}</span>`;
+      if (entry.language) html += `<span>${escapeHtml(entry.language)}</span>`;
+      if (entry.content_type) html += `<span>${escapeHtml(entry.content_type)}</span>`;
+      if (entry.timestamp) html += `<span>${fmtTime(entry.timestamp)}</span>`;
+      html += '</div>';
+      if (isRejected && entry.rejection_reason) {
+        html += `<div class="rejection-reason">${escapeHtml(entry.rejection_reason)}</div>`;
+      }
+      html += '</div>';
+    }
+
+    html += '</div>';
+    container.innerHTML = html;
+  }
+
+  async function load() {
+    try {
+      const res = await fetch('/v1/pipeline?limit=100');
+      if (!res.ok) throw new Error('Failed to load pipeline data');
+      data = await res.json();
+      renderTotals();
+      renderTab();
+    } catch (err) {
+      document.getElementById('log-content').innerHTML =
+        `<div class="empty">${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>

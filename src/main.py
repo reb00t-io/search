@@ -359,6 +359,55 @@ async def todo():
     )
 
 
+@app.route("/v1/pipeline", methods=["GET"])
+async def pipeline_api():
+    """Return recent pipeline activity from JSONL data files."""
+    data_dir = Path(os.environ.get("DATA_DIR", "data"))
+    limit = min(int(request.args.get("limit", "50")), 200)
+
+    def tail_jsonl(path: Path, n: int) -> list[dict]:
+        if not path.exists():
+            return []
+        lines = path.read_text().strip().splitlines()
+        result = []
+        for line in lines[-n:]:
+            try:
+                result.append(json.loads(line))
+            except json.JSONDecodeError:
+                pass
+        return result
+
+    ingested = tail_jsonl(data_dir / "ingested" / "documents.jsonl", limit)
+    filtered = tail_jsonl(data_dir / "filtered" / "documents.jsonl", limit)
+    rejected = tail_jsonl(data_dir / "rejected" / "rejected.jsonl", limit)
+
+    # Count totals
+    def count_lines(path: Path) -> int:
+        if not path.exists():
+            return 0
+        return sum(1 for line in path.read_text().strip().splitlines() if line.strip())
+
+    return jsonify({
+        "ingested_total": count_lines(data_dir / "ingested" / "documents.jsonl"),
+        "filtered_total": count_lines(data_dir / "filtered" / "documents.jsonl"),
+        "rejected_total": count_lines(data_dir / "rejected" / "rejected.jsonl"),
+        "ingested_recent": ingested,
+        "filtered_recent": filtered,
+        "rejected_recent": rejected,
+    })
+
+
+@app.route("/logs")
+async def logs_page():
+    if not _is_authenticated():
+        return redirect(url_for("login"))
+    return await render_template(
+        "logs.html",
+        version=VERSION,
+        deploy_date=DEPLOY_DATE,
+    )
+
+
 @app.route("/v1/sessions/latest", methods=["GET"])
 async def get_latest_session():
     if API_KEY and request.headers.get("Authorization", "") != f"Bearer {API_KEY}":
