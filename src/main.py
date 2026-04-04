@@ -343,14 +343,19 @@ async def chat():
     )
 
 
+TODO_PATH = _resolve_existing_path("TODO.md")
+
+
 @app.route("/todo")
 async def todo():
     if not _is_authenticated():
         return redirect(url_for("login"))
+    todo_content = TODO_PATH.read_text()
     return await render_template(
         "todo.html",
         version=VERSION,
         deploy_date=DEPLOY_DATE,
+        todo_md=todo_content,
     )
 
 

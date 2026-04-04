@@ -49,55 +49,90 @@
 
     .header nav a:hover { text-decoration: underline; }
 
-    .section {
-      margin-bottom: 2rem;
-    }
+    /* ─── Markdown content ──────────────────────────────────────── */
+    .md-content h1 { display: none; } /* hide top-level title, we have our own */
 
-    .section h2 {
-      font-size: 1.1rem;
-      font-weight: 600;
+    .md-content h2 {
+      font-size: 1.15rem;
+      font-weight: 700;
       color: #0f0f23;
-      margin-bottom: 0.75rem;
+      margin: 2rem 0 0.75rem;
       padding-bottom: 0.5rem;
       border-bottom: 1px solid #e2e8f0;
     }
 
-    .badge {
-      display: inline-block;
-      padding: 0.125rem 0.5rem;
-      font-size: 0.65rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      border-radius: 4px;
-      vertical-align: middle;
-      margin-left: 0.5rem;
-    }
+    .md-content h2:first-child { margin-top: 0; }
 
-    .badge-planned {
-      background: #fef3c7;
-      color: #92400e;
-    }
-
-    .todo-item {
-      padding: 1rem 1.25rem;
-      background: #fff;
-      border: 1px solid #e2e8f0;
-      border-radius: 12px;
-      margin-bottom: 0.75rem;
-    }
-
-    .todo-item h3 {
+    .md-content h3 {
       font-size: 0.95rem;
       font-weight: 600;
-      color: #1e293b;
-      margin-bottom: 0.5rem;
+      color: #334155;
+      margin: 1.25rem 0 0.5rem;
     }
 
-    .todo-item p {
+    .md-content p {
       font-size: 0.875rem;
       line-height: 1.7;
       color: #475569;
+      margin-bottom: 0.5rem;
+    }
+
+    .md-content ul {
+      list-style: none;
+      padding: 0;
+      margin: 0.5rem 0;
+    }
+
+    .md-content ul li {
+      position: relative;
+      padding: 0.5rem 0.75rem 0.5rem 2rem;
+      margin-bottom: 0.35rem;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      line-height: 1.6;
+      color: #334155;
+    }
+
+    .md-content ul li::before {
+      position: absolute;
+      left: 0.75rem;
+      top: 0.55rem;
+    }
+
+    /* Checkbox rendering */
+    .md-content ul li input[type="checkbox"] {
+      position: absolute;
+      left: 0.65rem;
+      top: 0.6rem;
+      accent-color: #6366f1;
+      pointer-events: none;
+      margin: 0;
+    }
+
+    .md-content ul li:has(input[type="checkbox"]:checked) {
+      background: #f0fdf4;
+      border-color: #bbf7d0;
+    }
+
+    .md-content strong {
+      font-weight: 600;
+      color: #1e293b;
+    }
+
+    .md-content code {
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+      font-size: 0.8125em;
+      background: #e8edf5;
+      border-radius: 4px;
+      padding: 0.1em 0.35em;
+    }
+
+    .md-content a {
+      color: #6366f1;
+      text-decoration: underline;
+      text-underline-offset: 2px;
     }
 
     .footer {
@@ -123,70 +158,18 @@
     <nav><a href="/">Search</a> &middot; <a href="/chat">Chat</a> &middot; <a href="/stats">Stats</a></nav>
   </header>
 
-  <div class="section">
-    <h2>Ingestion Pipeline <span class="badge badge-planned">Planned</span></h2>
-
-    <div class="todo-item">
-      <h3>Novelty-condensed document representation</h3>
-      <p>
-        During input processing, each document should be transformed into an
-        additional condensed text that retains only the information the document
-        genuinely adds to existing knowledge. Everything that is already well-known
-        or redundant across the corpus is removed, leaving a compact
-        "novelty-only" representation.
-      </p>
-      <p>
-        This condensed form is stored alongside the original text and can be used
-        for highly efficient search queries that surface what is truly new or
-        unique in a document.
-      </p>
-      <p>
-        Implementation must be done very carefully: aggressive removal risks
-        losing subtle but important details, while too little removal defeats the
-        purpose. A conservative, iterative approach with quality checks is
-        essential.
-      </p>
-    </div>
-  </div>
-
-  <div class="section">
-    <h2>Ranking Improvements <span class="badge badge-planned">Planned</span></h2>
-
-    <div class="todo-item">
-      <h3>Authority-based ranking (PageRank-style)</h3>
-      <p>
-        Introduce a static authority score for documents based on their link
-        structure and citation graph, similar to PageRank. Documents referenced
-        by many other high-quality documents should rank higher. This is
-        especially relevant for Wikipedia (internal links) and arXiv/PubMed
-        (citation networks).
-      </p>
-    </div>
-
-    <div class="todo-item">
-      <h3>Scientific review and citation scores</h3>
-      <p>
-        For academic sources (arXiv, PubMed), incorporate peer review signals
-        and citation counts into ranking. Papers with more citations, published
-        in higher-impact venues, or with formal peer review should receive a
-        ranking boost over preprints or less-cited work.
-      </p>
-    </div>
-
-    <div class="todo-item">
-      <h3>Document quality and novelty assessment</h3>
-      <p>
-        Score each document on writing quality (coherence, completeness,
-        factual density) and novelty (how much unique information it
-        contributes vs. what is already in the index). Use these scores as
-        ranking signals so that high-quality, information-dense documents
-        surface above shallow or redundant content.
-      </p>
-    </div>
-  </div>
+  <div class="md-content" id="md-content"></div>
 
   <footer class="footer">v{{ version }} &middot; deployed {{ deploy_date }}</footer>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/marked@15/marked.min.js"></script>
+<script>
+(function() {
+  const raw = {{ todo_md | tojson }};
+  const html = marked.parse(raw, { gfm: true, breaks: false });
+  document.getElementById('md-content').innerHTML = html;
+})();
+</script>
 </body>
 </html>
