@@ -15,6 +15,7 @@ services:
       - AUTH_MODE=${AUTH_MODE:-none}
       - AUTH_PASSWORD=${AUTH_PASSWORD:-}
       - QDRANT_URL=http://qdrant:6333
+      - DATA_DIR=/data
       - SESSIONS_PATH=/data/sessions.json
       - REQUEST_LOG_PATH=/data/requests.log
       - PID_FILE=/data/search.pid
