@@ -149,6 +149,42 @@
     </div>
   </div>
 
+  <div class="section">
+    <h2>Ranking Improvements <span class="badge badge-planned">Planned</span></h2>
+
+    <div class="todo-item">
+      <h3>Authority-based ranking (PageRank-style)</h3>
+      <p>
+        Introduce a static authority score for documents based on their link
+        structure and citation graph, similar to PageRank. Documents referenced
+        by many other high-quality documents should rank higher. This is
+        especially relevant for Wikipedia (internal links) and arXiv/PubMed
+        (citation networks).
+      </p>
+    </div>
+
+    <div class="todo-item">
+      <h3>Scientific review and citation scores</h3>
+      <p>
+        For academic sources (arXiv, PubMed), incorporate peer review signals
+        and citation counts into ranking. Papers with more citations, published
+        in higher-impact venues, or with formal peer review should receive a
+        ranking boost over preprints or less-cited work.
+      </p>
+    </div>
+
+    <div class="todo-item">
+      <h3>Document quality and novelty assessment</h3>
+      <p>
+        Score each document on writing quality (coherence, completeness,
+        factual density) and novelty (how much unique information it
+        contributes vs. what is already in the index). Use these scores as
+        ranking signals so that high-quality, information-dense documents
+        surface above shallow or redundant content.
+      </p>
+    </div>
+  </div>
+
   <footer class="footer">v{{ version }} &middot; deployed {{ deploy_date }}</footer>
 </div>
 
