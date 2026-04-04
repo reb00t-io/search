@@ -343,6 +343,17 @@ async def chat():
     )
 
 
+@app.route("/todo")
+async def todo():
+    if not _is_authenticated():
+        return redirect(url_for("login"))
+    return await render_template(
+        "todo.html",
+        version=VERSION,
+        deploy_date=DEPLOY_DATE,
+    )
+
+
 @app.route("/v1/sessions/latest", methods=["GET"])
 async def get_latest_session():
     if API_KEY and request.headers.get("Authorization", "") != f"Bearer {API_KEY}":

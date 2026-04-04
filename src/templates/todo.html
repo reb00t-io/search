@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Todo - Search</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      background: #f8f9fa;
+      color: #1a1a2e;
+    }
+
+    .container {
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
+    }
+
+    .header {
+      padding: 2rem 0 1.5rem;
+    }
+
+    .header h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: #0f0f23;
+      margin-bottom: 0.25rem;
+    }
+
+    .header .meta {
+      font-size: 0.75rem;
+      color: #94a3b8;
+      margin-bottom: 0.5rem;
+    }
+
+    .header nav {
+      font-size: 0.85rem;
+    }
+
+    .header nav a {
+      color: #6366f1;
+      text-decoration: none;
+    }
+
+    .header nav a:hover { text-decoration: underline; }
+
+    .section {
+      margin-bottom: 2rem;
+    }
+
+    .section h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #0f0f23;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.125rem 0.5rem;
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-radius: 4px;
+      vertical-align: middle;
+      margin-left: 0.5rem;
+    }
+
+    .badge-planned {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .todo-item {
+      padding: 1rem 1.25rem;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      margin-bottom: 0.75rem;
+    }
+
+    .todo-item h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #1e293b;
+      margin-bottom: 0.5rem;
+    }
+
+    .todo-item p {
+      font-size: 0.875rem;
+      line-height: 1.7;
+      color: #475569;
+    }
+
+    .footer {
+      text-align: center;
+      padding: 2rem 0 1rem;
+      font-size: 0.75rem;
+      color: #cbd5e1;
+    }
+
+    @media (max-width: 600px) {
+      .container { padding: 1rem; }
+      .header { padding: 1.5rem 0 1rem; }
+      .header h1 { font-size: 1.25rem; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header class="header">
+    <p class="meta">{{ deploy_date }}</p>
+    <h1>Todo</h1>
+    <nav><a href="/">Search</a> &middot; <a href="/chat">Chat</a></nav>
+  </header>
+
+  <div class="section">
+    <h2>Ingestion Pipeline <span class="badge badge-planned">Planned</span></h2>
+
+    <div class="todo-item">
+      <h3>Novelty-condensed document representation</h3>
+      <p>
+        During input processing, each document should be transformed into an
+        additional condensed text that retains only the information the document
+        genuinely adds to existing knowledge. Everything that is already well-known
+        or redundant across the corpus is removed, leaving a compact
+        "novelty-only" representation.
+      </p>
+      <p>
+        This condensed form is stored alongside the original text and can be used
+        for highly efficient search queries that surface what is truly new or
+        unique in a document.
+      </p>
+      <p>
+        Implementation must be done very carefully: aggressive removal risks
+        losing subtle but important details, while too little removal defeats the
+        purpose. A conservative, iterative approach with quality checks is
+        essential.
+      </p>
+    </div>
+  </div>
+
+  <footer class="footer">v{{ version }} &middot; deployed {{ deploy_date }}</footer>
+</div>
+
+</body>
+</html>
