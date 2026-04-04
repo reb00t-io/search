@@ -9,8 +9,23 @@ REMOTE_USER="marko"
 IMAGE_NAME="search"
 REMOTE="$REMOTE_USER@$REMOTE_HOST"
 REMOTE_DIR="\$HOME/search"
-SSH_OPTS=(-p "$REMOTE_PORT" -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3)
+SSH_OPTS=(-p "$REMOTE_PORT" -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=6)
+SCP_OPTS=(-P "$REMOTE_PORT" -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=6)
 : "${PUBLIC_URL:?PUBLIC_URL must be set}"
+
+# Retry wrapper: retry_cmd <max_attempts> <backoff_secs> <command...>
+retry_cmd() {
+  local max=$1 backoff=$2; shift 2
+  local attempt=1
+  while true; do
+    if "$@"; then return 0; fi
+    if (( attempt >= max )); then return 1; fi
+    echo " (attempt $attempt/$max failed, retrying in ${backoff}s...)"
+    sleep "$backoff"
+    backoff=$(( backoff * 2 ))
+    attempt=$(( attempt + 1 ))
+  done
+}
 : "${LLM_BASE_URL:?LLM_BASE_URL must be set}"
 : "${LLM_API_KEY:?LLM_API_KEY must be set}"
 : "${API_KEY:?API_KEY must be set}"
@@ -40,8 +55,7 @@ docker save "$IMAGE_NAME" | gzip > /tmp/"${IMAGE_NAME}".tar.gz
 echo "ok"
 
 printf "==> uploading to $REMOTE_HOST..."
-scp -P "$REMOTE_PORT" -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 \
-  /tmp/"${IMAGE_NAME}".tar.gz "$REMOTE":/tmp/"${IMAGE_NAME}".tar.gz
+retry_cmd 3 2 scp "${SCP_OPTS[@]}" /tmp/"${IMAGE_NAME}".tar.gz "$REMOTE":/tmp/"${IMAGE_NAME}".tar.gz
 rm /tmp/"${IMAGE_NAME}".tar.gz
 echo "ok"
 
@@ -55,8 +69,8 @@ echo "ok"
 
 # --- Upload docker-compose.yml ---
 printf "==> uploading compose file..."
-ssh "${SSH_OPTS[@]}" "$REMOTE" "mkdir -p ~/search"
-scp -P "$REMOTE_PORT" -o ConnectTimeout=10 docker-compose.yml "$REMOTE":~/search/docker-compose.yml
+retry_cmd 3 2 ssh "${SSH_OPTS[@]}" "$REMOTE" "mkdir -p ~/search"
+retry_cmd 3 2 scp "${SCP_OPTS[@]}" docker-compose.yml "$REMOTE":~/search/docker-compose.yml
 echo "ok"
 
 # --- Write .env on remote ---
