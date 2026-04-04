@@ -1,9 +1,10 @@
 FROM python:3.13-slim
 
 WORKDIR /app
-COPY pyproject.toml VERSION ./
+COPY pyproject.toml VERSION TODO.md ./
 COPY config/ ./config/
 COPY docs/ ./docs/
+COPY scripts/ ./scripts/
 COPY src/ ./src/
 COPY serving/ ./serving/
 COPY ingestion/ ./ingestion/
