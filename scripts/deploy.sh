@@ -9,9 +9,19 @@ REMOTE_USER="marko"
 IMAGE_NAME="search"
 REMOTE="$REMOTE_USER@$REMOTE_HOST"
 REMOTE_DIR="\$HOME/search"
-SSH_OPTS=(-p "$REMOTE_PORT" -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=6)
-SCP_OPTS=(-P "$REMOTE_PORT" -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=6)
+
+# Persistent SSH multiplexed connection — all ssh/scp commands share one TCP session.
+SSH_CONTROL_DIR=$(mktemp -d)
+SSH_CONTROL_PATH="$SSH_CONTROL_DIR/ctrl-%C"
+SSH_OPTS=(-p "$REMOTE_PORT" -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=12 -o ControlMaster=auto -o ControlPath="$SSH_CONTROL_PATH" -o ControlPersist=300)
+SCP_OPTS=(-P "$REMOTE_PORT" -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=12 -o ControlMaster=auto -o ControlPath="$SSH_CONTROL_PATH" -o ControlPersist=300)
 : "${PUBLIC_URL:?PUBLIC_URL must be set}"
+
+cleanup_ssh() {
+  ssh "${SSH_OPTS[@]}" -O exit "$REMOTE" 2>/dev/null || true
+  rm -rf "$SSH_CONTROL_DIR"
+}
+trap cleanup_ssh EXIT
 
 # Retry wrapper: retry_cmd <max_attempts> <backoff_secs> <command...>
 retry_cmd() {
