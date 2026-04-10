@@ -87,6 +87,51 @@
     .delta.negative { color: #ef4444; }
     .delta.neutral { color: #94a3b8; }
 
+    /* Schedule card */
+    .schedule-card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .schedule-card .title {
+      font-size: 0.75rem;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+    }
+
+    .schedule-card .window {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 1.5rem;
+      color: #6366f1;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .schedule-card .window .tz {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 0.85rem;
+      color: #94a3b8;
+      font-weight: 400;
+      margin-left: 0.5rem;
+    }
+
+    .schedule-card .meta {
+      font-size: 0.8rem;
+      color: #64748b;
+      margin-top: 0.4rem;
+    }
+
+    .schedule-card .empty {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      font-style: italic;
+    }
+
     /* Source breakdown */
     .section {
       margin-bottom: 2rem;
@@ -189,6 +234,11 @@
     <nav><a href="/">Search</a> &middot; <a href="/chat">Chat</a> &middot; <a href="/logs">Logs</a> &middot; <a href="/todo">Todo</a></nav>
   </header>
 
+  <div id="schedule-card" class="schedule-card">
+    <div class="title">Ingestion schedule</div>
+    <div class="empty">Loading…</div>
+  </div>
+
   <div id="stats-content">
     <div class="loading">Loading stats...</div>
   </div>
@@ -216,10 +266,33 @@
       const res = await fetch('/v1/stats');
       if (!res.ok) throw new Error('Stats not available');
       const stats = await res.json();
+      renderSchedule(stats.schedule);
       renderStats(stats);
     } catch (err) {
       container.innerHTML = `<div class="error">${err.message}</div>`;
+      renderSchedule(null);
     }
+  }
+
+  function pad2(n) { return n.toString().padStart(2, '0'); }
+
+  function renderSchedule(schedule) {
+    const card = document.getElementById('schedule-card');
+    if (!schedule) {
+      card.innerHTML = `
+        <div class="title">Ingestion schedule</div>
+        <div class="empty">No active ingestion service detected (no schedule file found).</div>`;
+      return;
+    }
+    const start = `${pad2(schedule.start_hour)}:${pad2(schedule.start_minute)}`;
+    const end = `${pad2(schedule.end_hour)}:${pad2(schedule.end_minute)}`;
+    const sources = Array.isArray(schedule.sources) ? schedule.sources.join(', ') : '';
+    card.innerHTML = `
+      <div class="title">Ingestion schedule</div>
+      <div class="window">${start}–${end}<span class="tz">${escapeHtml(schedule.tz || '')}</span></div>
+      <div class="meta">Window: ${schedule.duration_minutes} min · limit: ${schedule.limit_per_source} new docs/source per cycle</div>
+      <div class="meta">Sources: ${escapeHtml(sources)}</div>
+      <div class="meta">Service started: ${escapeHtml(schedule.started_at || '')}</div>`;
   }
 
   function fmtBytes(b) {

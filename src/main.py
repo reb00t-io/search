@@ -538,6 +538,17 @@ async def search_endpoint():
     return jsonify(result)
 
 
+def _read_ingestion_schedule(data_dir: Path) -> dict | None:
+    """Read the active ingestion schedule written by the ingestion service on startup."""
+    schedule_path = data_dir / "ingestion_schedule.json"
+    if not schedule_path.exists():
+        return None
+    try:
+        return json.loads(schedule_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
 def _get_index_stats():
     """Collect current index statistics."""
     from collections import Counter
@@ -581,6 +592,9 @@ def _get_index_stats():
 
     stats["content_bytes"] = _dir_size(data_dir / "content")
     stats["data_bytes"] = _dir_size(data_dir)
+
+    # Active ingestion schedule (written by ingestion service on startup)
+    stats["schedule"] = _read_ingestion_schedule(data_dir)
 
     return stats
 

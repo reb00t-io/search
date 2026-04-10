@@ -90,6 +90,19 @@ printf -v llm_base_url_q '%q' "$LLM_BASE_URL"
 printf -v llm_api_key_q '%q' "$LLM_API_KEY"
 printf -v api_key_q '%q' "$API_KEY"
 printf -v auth_password_q '%q' "$AUTH_PASSWORD"
+
+# Optional ingestion schedule overrides — only emit lines for vars that are set,
+# so the docker-compose defaults (00:00–06:00 Europe/Berlin) apply by default.
+# Values are written verbatim (no %q): docker-compose's .env parser is not a
+# shell, so escaping commas/etc would break values like INGESTION_SOURCES=dw,tagesschau.
+extra_env=""
+for var in INGESTION_START_HOUR INGESTION_START_MINUTE INGESTION_DURATION_MINUTES \
+           INGESTION_LIMIT_PER_SOURCE INGESTION_TZ INGESTION_SOURCES; do
+  if [[ -n "${!var:-}" ]]; then
+    extra_env+="${var}=${!var}"$'\n'
+  fi
+done
+
 retry_cmd 3 2 ssh "${SSH_OPTS[@]}" "$REMOTE" 'bash -se' <<EOF
 cat > ~/search/.env <<'ENVEOF'
 PORT=$port_q
@@ -98,7 +111,7 @@ LLM_API_KEY=$llm_api_key_q
 API_KEY=$api_key_q
 AUTH_MODE=password
 AUTH_PASSWORD=$auth_password_q
-ENVEOF
+${extra_env}ENVEOF
 EOF
 echo "ok"
 
