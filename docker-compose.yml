@@ -39,8 +39,12 @@ services:
       - INGESTION_LIMIT_PER_SOURCE=${INGESTION_LIMIT_PER_SOURCE:-100}
       - INGESTION_TZ=${INGESTION_TZ:-Europe/Berlin}
       - INGESTION_SOURCES=${INGESTION_SOURCES:-wiki,arxiv,gesetze,pubmed,rki,tagesschau,dw}
+      # Used for the per-window stats snapshot appended to data/stats/history.jsonl
+      - QDRANT_URL=http://qdrant:6333
     volumes:
       - search_data:/data
+    depends_on:
+      - qdrant
     restart: unless-stopped
 
   filtering:
@@ -63,28 +67,6 @@ services:
     depends_on:
       - qdrant
       - filtering
-    restart: unless-stopped
-
-  stats-collector:
-    image: search
-    command: >
-      sh -c 'while true; do
-        TARGET=$$(TZ=Europe/Berlin date -d "tomorrow 06:30" +%s 2>/dev/null || date -d "06:30 tomorrow" +%s);
-        NOW=$$(date +%s);
-        SLEEP=$$((TARGET - NOW));
-        if [ $$SLEEP -le 0 ]; then SLEEP=$$((SLEEP + 86400)); fi;
-        echo "Sleeping $${SLEEP}s until next collection...";
-        sleep $$SLEEP;
-        python scripts/collect_stats.py --data-dir /data --qdrant-url http://qdrant:6333;
-      done'
-    environment:
-      - TZ=Europe/Berlin
-      - LLM_BASE_URL=${LLM_BASE_URL}
-      - LLM_API_KEY=${LLM_API_KEY}
-    volumes:
-      - search_data:/data
-    depends_on:
-      - qdrant
     restart: unless-stopped
 
 volumes:

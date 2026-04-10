@@ -212,6 +212,48 @@ def _wait_for_window(
         sleep_fn(min(60.0, max(1.0, secs)))
 
 
+def _write_stats_snapshot(data_dir: Path, qdrant_url: str) -> None:
+    """Append a stats snapshot to data/stats/history.jsonl.
+
+    Called once after each ingestion window closes so the /stats history
+    chart captures every actual ingestion run, instead of relying on a
+    separate daily collector that may miss ad-hoc runs.
+
+    Best-effort: any failure is logged and swallowed so a broken snapshot
+    cannot disrupt ingestion.
+    """
+    try:
+        # The scripts/ directory isn't a Python package, so add the project
+        # root to sys.path and import collect_stats by file path.
+        import importlib.util
+        import sys
+        project_root = Path(__file__).resolve().parent.parent
+        if str(project_root) not in sys.path:
+            sys.path.insert(0, str(project_root))
+        spec = importlib.util.spec_from_file_location(
+            "collect_stats", project_root / "scripts" / "collect_stats.py"
+        )
+        if spec is None or spec.loader is None:
+            raise ImportError("could not load scripts/collect_stats.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        stats = module.collect(Path(data_dir), qdrant_url)
+        history_dir = Path(data_dir) / "stats"
+        history_dir.mkdir(parents=True, exist_ok=True)
+        history_path = history_dir / "history.jsonl"
+        with open(history_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(stats) + "\n")
+        logger.info(
+            "Stats snapshot written: %d docs, %d indexed (%s)",
+            stats.get("documents", 0),
+            stats.get("indexed_points", 0),
+            history_path,
+        )
+    except Exception as exc:  # noqa: BLE001 — best-effort, must never break ingestion
+        logger.warning("Failed to write stats snapshot: %s", exc)
+
+
 def _run_one_cycle(args, schedule: Schedule | None = None) -> int:
     """Run one ingestion cycle. Returns total new documents ingested."""
     store = ContentStore(args.data_dir)
@@ -331,15 +373,25 @@ def main():
     logger.info("Ingestion schedule: %s, limit=%d/source (wrote %s)",
                 schedule.describe(), args.limit, schedule_path)
 
-    # Continuous mode: ingest during window, sleep outside it
+    qdrant_url = os.environ.get("QDRANT_URL", "http://localhost:6333")
+
+    # Continuous mode: ingest during window, sleep outside it. After each
+    # window closes, write a single stats snapshot so the /stats history
+    # chart captures every actual ingestion run.
+    window_was_open = False
     while not _shutdown:
         if schedule.in_window():
+            window_was_open = True
             logger.info("Ingestion window open (%s), starting cycle", schedule.describe())
             total = _run_one_cycle(args, schedule=schedule)
             logger.info("Cycle complete: %d new documents ingested", total)
             if not _shutdown and schedule.in_window():
                 time.sleep(30)  # brief pause between cycles
         else:
+            if window_was_open:
+                logger.info("Ingestion window just closed; writing stats snapshot")
+                _write_stats_snapshot(Path(args.data_dir), qdrant_url)
+                window_was_open = False
             _wait_for_window(schedule)
 
 
