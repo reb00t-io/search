@@ -11,7 +11,9 @@ REMOTE="$REMOTE_USER@$REMOTE_HOST"
 REMOTE_DIR="\$HOME/search"
 
 # Persistent SSH multiplexed connection — all ssh/scp commands share one TCP session.
-SSH_CONTROL_DIR=$(mktemp -d)
+# Force the control dir under /tmp: Unix domain sockets cap at ~104 bytes,
+# and macOS's TMPDIR (/var/folders/...) plus the %C hash exceeds that limit.
+SSH_CONTROL_DIR=$(mktemp -d /tmp/search-deploy-ssh.XXXXXX)
 SSH_CONTROL_PATH="$SSH_CONTROL_DIR/ctrl-%C"
 SSH_OPTS=(-p "$REMOTE_PORT" -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=12 -o ControlMaster=auto -o ControlPath="$SSH_CONTROL_PATH" -o ControlPersist=300)
 SCP_OPTS=(-P "$REMOTE_PORT" -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=12 -o ControlMaster=auto -o ControlPath="$SSH_CONTROL_PATH" -o ControlPersist=300)
