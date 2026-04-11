@@ -90,6 +90,20 @@ print_remote_diagnostics() {
   ' || true
 }
 
+# --- Tests ---
+# Run the unit suite before any build/upload work so a regression aborts the
+# deploy locally rather than after pushing a bad image. The EXIT trap will
+# notify with deploy_step="run tests" if pytest fails.
+deploy_step="run tests"
+printf "==> running tests..."
+if ! pytest_output=$(pytest test/ 2>&1); then
+  echo "FAIL"
+  echo "$pytest_output" | sed 's/^/    /'
+  exit 1
+fi
+# Print the summary line so the deploy log shows how many tests ran.
+echo "$pytest_output" | tail -1 | sed 's/^/ /'
+
 # --- Build ---
 deploy_step="build image"
 printf "==> building image ($IMAGE_NAME, linux/amd64)..."
