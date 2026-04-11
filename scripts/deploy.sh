@@ -34,15 +34,26 @@ notify_deploy_result() {
   local status="$1"  # "succeeded" or "failed"
   local short_sha
   short_sha=$(git rev-parse --short HEAD 2>/dev/null || echo "?")
+
+  # Derive the GitHub URL from `git remote get-url origin` so the commit
+  # link doesn't hardcode the repo. Handles both git@ and https:// remotes.
+  local repo_url=""
+  if remote=$(git remote get-url origin 2>/dev/null); then
+    repo_url="${remote%.git}"
+    repo_url="${repo_url/git@github.com:/https://github.com/}"
+  fi
+
+  local app_link="[${IMAGE_NAME}](${PUBLIC_URL:-#})"
+  local commit_link="${short_sha}"
+  if [ -n "$repo_url" ] && [ "$short_sha" != "?" ]; then
+    commit_link="[${short_sha}](${repo_url}/commit/${short_sha})"
+  fi
+
   local subject
   if [ "$status" = "succeeded" ]; then
-    subject="✅ ${IMAGE_NAME}: deployed ${short_sha}"
+    subject="✅ ${app_link}: deployed ${commit_link}"
   else
-    subject="❌ **${IMAGE_NAME} deploy FAILED**
-
-step: ${deploy_step}
-commit: \`${short_sha}\`
-host: ${REMOTE_HOST}"
+    subject="❌ ${app_link}: deploy FAILED at \`${deploy_step}\` (${commit_link})"
   fi
   "${SCRIPT_DIR}/notify.sh" "$subject" || true
 }
