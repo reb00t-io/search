@@ -3,12 +3,18 @@ set -euo pipefail
 
 # Deploy script: builds image locally, uploads to remote, runs via docker-compose.
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 REMOTE_HOST="test.k3rnel-pan1c.com"
 REMOTE_PORT=2223
 REMOTE_USER="marko"
 IMAGE_NAME="search"
 REMOTE="$REMOTE_USER@$REMOTE_HOST"
 REMOTE_DIR="\$HOME/search"
+
+# Tracks the current deploy stage; surfaced in failure notifications so the
+# alert points at the step that broke. Updated before each stage below.
+deploy_step="init"
 
 # Persistent SSH multiplexed connection — all ssh/scp commands share one TCP session.
 # Force the control dir under /tmp: Unix domain sockets cap at ~104 bytes,
@@ -23,7 +29,37 @@ cleanup_ssh() {
   ssh "${SSH_OPTS[@]}" -O exit "$REMOTE" 2>/dev/null || true
   rm -rf "$SSH_CONTROL_DIR"
 }
-trap cleanup_ssh EXIT
+
+notify_deploy_result() {
+  local status="$1"  # "succeeded" or "failed"
+  local short_sha
+  short_sha=$(git rev-parse --short HEAD 2>/dev/null || echo "?")
+  local subject
+  if [ "$status" = "succeeded" ]; then
+    subject="✅ **${IMAGE_NAME} deploy succeeded**
+
+url: ${PUBLIC_URL:-?}
+commit: \`${short_sha}\`"
+  else
+    subject="❌ **${IMAGE_NAME} deploy FAILED**
+
+step: ${deploy_step}
+commit: \`${short_sha}\`
+host: ${REMOTE_HOST}"
+  fi
+  "${SCRIPT_DIR}/notify.sh" "$subject" || true
+}
+
+on_exit() {
+  local code=$?
+  cleanup_ssh
+  if [ "$code" -eq 0 ]; then
+    notify_deploy_result succeeded
+  else
+    notify_deploy_result failed
+  fi
+}
+trap on_exit EXIT
 
 # Retry wrapper: retry_cmd <max_attempts> <backoff_secs> <command...>
 retry_cmd() {
@@ -55,6 +91,7 @@ print_remote_diagnostics() {
 }
 
 # --- Build ---
+deploy_step="build image"
 printf "==> building image ($IMAGE_NAME, linux/amd64)..."
 if [ "${SKIP_DOCKER_BUILD:-0}" != "1" ]; then
   ./scripts/build.sh linux/amd64 > /dev/null 2>&1
@@ -62,16 +99,19 @@ fi
 echo "ok"
 
 # --- Save & upload ---
+deploy_step="save image"
 printf "==> saving image..."
 docker save "$IMAGE_NAME" | gzip > /tmp/"${IMAGE_NAME}".tar.gz
 echo "ok"
 
+deploy_step="upload image"
 printf "==> uploading to $REMOTE_HOST..."
 retry_cmd 3 2 scp "${SCP_OPTS[@]}" /tmp/"${IMAGE_NAME}".tar.gz "$REMOTE":/tmp/"${IMAGE_NAME}".tar.gz
 rm /tmp/"${IMAGE_NAME}".tar.gz
 echo "ok"
 
 # --- Load image on remote ---
+deploy_step="load image on remote"
 printf "==> loading image on remote..."
 ssh "${SSH_OPTS[@]}" "$REMOTE" '
   docker load < /tmp/'"${IMAGE_NAME}"'.tar.gz
@@ -80,12 +120,14 @@ ssh "${SSH_OPTS[@]}" "$REMOTE" '
 echo "ok"
 
 # --- Upload docker-compose.yml ---
+deploy_step="upload compose file"
 printf "==> uploading compose file..."
 retry_cmd 3 2 ssh "${SSH_OPTS[@]}" "$REMOTE" "mkdir -p ~/search"
 retry_cmd 3 2 scp "${SCP_OPTS[@]}" docker-compose.yml "$REMOTE":~/search/docker-compose.yml
 echo "ok"
 
 # --- Write .env on remote ---
+deploy_step="write remote .env"
 printf "==> writing remote .env..."
 printf -v port_q '%q' "$PORT"
 printf -v llm_base_url_q '%q' "$LLM_BASE_URL"
@@ -118,6 +160,7 @@ EOF
 echo "ok"
 
 # --- Start services ---
+deploy_step="start services"
 printf "==> starting services..."
 if ! retry_cmd 3 4 ssh "${SSH_OPTS[@]}" "$REMOTE" '
   cd ~/search
@@ -130,6 +173,7 @@ fi
 echo "ok"
 
 # --- Wait for server ---
+deploy_step="wait for server"
 printf "==> waiting for server..."
 WAIT_TIMEOUT_SECONDS="${WAIT_TIMEOUT_SECONDS:-120}"
 WAIT_INTERVAL_SECONDS="${WAIT_INTERVAL_SECONDS:-2}"
@@ -153,6 +197,7 @@ fi
 echo "server reachable"
 
 # --- Check public endpoint ---
+deploy_step="check public endpoint"
 printf "==> checking public endpoint ($PUBLIC_URL)..."
 if ! body=$(curl -sfL --max-time 10 "$PUBLIC_URL"); then
   echo "FAIL"
@@ -169,6 +214,7 @@ fi
 echo "ok"
 
 # --- Fetch logs ---
+deploy_step="fetch logs"
 ./scripts/get_logs.sh
 
 echo "==> deployed $IMAGE_NAME to $PUBLIC_URL"
