@@ -306,18 +306,24 @@
     return n.toLocaleString();
   }
 
-  function deltaHtml(current, previous) {
+  // Delta = change between the two most recent snapshots, i.e. what the last
+  // completed ingestion added. We deliberately do NOT diff against live stats:
+  // a snapshot is written immediately when the window closes, so live ≈ last
+  // snapshot and that diff would be ~0 ("no change") until the next run.
+  function deltaHtml(latest, previous) {
+    if (latest === undefined || latest === null) return '';
     if (previous === undefined || previous === null) return '';
-    const diff = current - previous;
+    const diff = latest - previous;
     if (diff === 0) return '<span class="delta neutral">no change</span>';
     const sign = diff > 0 ? '+' : '';
     const cls = diff > 0 ? 'positive' : 'negative';
     return `<span class="delta ${cls}">${sign}${fmtNum(diff)}</span>`;
   }
 
-  function deltaBytesHtml(current, previous) {
+  function deltaBytesHtml(latest, previous) {
+    if (latest === undefined || latest === null) return '';
     if (previous === undefined || previous === null) return '';
-    const diff = current - previous;
+    const diff = latest - previous;
     if (diff === 0) return '<span class="delta neutral">no change</span>';
     const sign = diff > 0 ? '+' : '';
     const cls = diff > 0 ? 'positive' : 'negative';
@@ -325,27 +331,29 @@
   }
 
   function renderStats(stats) {
-    const prev = history.length > 0 ? history[history.length - 1] : null;
+    const last = history.length > 0 ? history[history.length - 1] : null;
+    const prev = history.length > 1 ? history[history.length - 2] : null;
     const container = document.getElementById('stats-content');
 
     let html = '<div class="stats-grid">';
-    html += card('Documents', fmtNum(stats.documents), deltaHtml(stats.documents, prev?.documents));
-    html += card('Indexed Points', fmtNum(stats.indexed_points), deltaHtml(stats.indexed_points, prev?.indexed_points));
-    html += card('Full Text', fmtNum(stats.full_text), deltaHtml(stats.full_text, prev?.full_text));
-    html += card('Abstracts', fmtNum(stats.abstracts), deltaHtml(stats.abstracts, prev?.abstracts));
-    html += card('Content Size', fmtBytes(stats.content_bytes), deltaBytesHtml(stats.content_bytes, prev?.content_bytes));
-    html += card('Data Size', fmtBytes(stats.data_bytes), deltaBytesHtml(stats.data_bytes, prev?.data_bytes));
+    html += card('Documents', fmtNum(stats.documents), deltaHtml(last?.documents, prev?.documents));
+    html += card('Indexed Points', fmtNum(stats.indexed_points), deltaHtml(last?.indexed_points, prev?.indexed_points));
+    html += card('Full Text', fmtNum(stats.full_text), deltaHtml(last?.full_text, prev?.full_text));
+    html += card('Abstracts', fmtNum(stats.abstracts), deltaHtml(last?.abstracts, prev?.abstracts));
+    html += card('Content Size', fmtBytes(stats.content_bytes), deltaBytesHtml(last?.content_bytes, prev?.content_bytes));
+    html += card('Data Size', fmtBytes(stats.data_bytes), deltaBytesHtml(last?.data_bytes, prev?.data_bytes));
     html += '</div>';
 
     // Source breakdown
     if (stats.by_source && Object.keys(stats.by_source).length > 0) {
       html += '<div class="section"><h2>By Source</h2><div class="source-list">';
       for (const [src, count] of Object.entries(stats.by_source)) {
+        const lastCount = last?.by_source?.[src];
         const prevCount = prev?.by_source?.[src];
         html += `<div class="source-item">
           <div class="name">${escapeHtml(src)}</div>
           <div class="count">${fmtNum(count)}</div>
-          ${deltaHtml(count, prevCount)}
+          ${deltaHtml(lastCount, prevCount)}
         </div>`;
       }
       html += '</div></div>';

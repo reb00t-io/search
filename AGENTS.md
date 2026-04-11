@@ -105,4 +105,10 @@ N/A — to be added after implementation
 ## 10. Pull Requests & Branching
 Default branch: main
 
-When a PR is requested, create a branch agent/<branch_name> and create a PR from there using gh
+Workflow to follow:
+1. code changes
+2. run tests
+3. run test/e2e.sh
+4. commit to main
+5. run scripts/deploy.sh (amend the commit with fixes)
+6. push
