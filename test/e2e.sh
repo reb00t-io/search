@@ -3,6 +3,17 @@ set -euo pipefail
 
 : "${PORT:?PORT must be set}"
 
+# The e2e test only hits `GET /` on the search container, so it never actually
+# exercises the LLM or any API_KEY-protected endpoint. The container reads
+# LLM_BASE_URL at import time though, and docker-compose substitutes these
+# vars unconditionally — so they need to be *set* (not necessarily real). When
+# not provided by the caller, fall back to throwaway values so the e2e can
+# run without any secrets at all (e.g. in CI).
+: "${LLM_BASE_URL:=http://llm.invalid}"
+: "${LLM_API_KEY:=e2e-dummy}"
+: "${API_KEY:=$(head -c 24 /dev/urandom | base64 | tr -d '/+=\n')}"
+export LLM_BASE_URL LLM_API_KEY API_KEY
+
 if [ "${SKIP_DOCKER_BUILD:-0}" != "1" ]; then
   ./scripts/build.sh
 fi
