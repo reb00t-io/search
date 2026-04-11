@@ -75,15 +75,35 @@ print(json.dumps(body))
 resp_file=$(mktemp -t notify-resp.XXXXXX)
 trap 'rm -f "$resp_file"' EXIT
 
-http_code=$(curl -sS -o "$resp_file" -w "%{http_code}" \
-  -X POST "$NOTIFY_URL" \
-  -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer $NOTIFY_API_KEY" \
-  --data-binary "$payload" || echo "000")
+# Retry transient failures: the upstream notify API occasionally returns 5xx
+# or the connection blips. 3 attempts with exponential backoff (2s, 4s).
+max_attempts=3
+backoff=2
+attempt=1
+http_code="000"
+while (( attempt <= max_attempts )); do
+  http_code=$(curl -sS -o "$resp_file" -w "%{http_code}" \
+    -X POST "$NOTIFY_URL" \
+    -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer $NOTIFY_API_KEY" \
+    --data-binary "$payload" || echo "000")
 
-if [[ "$http_code" =~ ^2[0-9][0-9]$ ]]; then
-  exit 0
-fi
+  if [[ "$http_code" =~ ^2[0-9][0-9]$ ]]; then
+    exit 0
+  fi
+
+  # Don't retry client errors (4xx) — they won't fix themselves.
+  if [[ "$http_code" =~ ^4[0-9][0-9]$ ]]; then
+    break
+  fi
+
+  if (( attempt < max_attempts )); then
+    echo "notify: HTTP $http_code from $NOTIFY_URL, retrying in ${backoff}s (attempt $attempt/$max_attempts)" >&2
+    sleep "$backoff"
+    backoff=$(( backoff * 2 ))
+  fi
+  attempt=$(( attempt + 1 ))
+done
 
 body=$(cat "$resp_file" 2>/dev/null || true)
 echo "notify: HTTP $http_code from $NOTIFY_URL — $body" >&2
