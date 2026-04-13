@@ -254,6 +254,32 @@ def _write_stats_snapshot(data_dir: Path, qdrant_url: str) -> None:
         logger.warning("Failed to write stats snapshot: %s", exc)
 
 
+def _write_ingestion_log(data_dir: Path, slots: list[SourceSlot], total_new: int) -> None:
+    """Write a summary of the latest ingestion cycle to data/stats/last_ingestion.json."""
+    try:
+        log = {
+            "timestamp": datetime.now(ZoneInfo("UTC")).isoformat(timespec="seconds"),
+            "total_new": total_new,
+            "sources": {
+                slot.name: {
+                    "new": slot.new_count,
+                    "skipped": slot.skipped,
+                    "total_tracked": len(slot.cursor.seen_ids),
+                    "limit": slot.limit,
+                    "exhausted": slot.exhausted,
+                }
+                for slot in slots
+            },
+        }
+        stats_dir = Path(data_dir) / "stats"
+        stats_dir.mkdir(parents=True, exist_ok=True)
+        path = stats_dir / "last_ingestion.json"
+        path.write_text(json.dumps(log, indent=2), encoding="utf-8")
+        logger.info("Ingestion log written to %s", path)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed to write ingestion log: %s", exc)
+
+
 def _run_one_cycle(args, schedule: Schedule | None = None) -> int:
     """Run one ingestion cycle. Returns total new documents ingested."""
     store = ContentStore(args.data_dir)
@@ -302,6 +328,7 @@ def _run_one_cycle(args, schedule: Schedule | None = None) -> int:
                     slot.name, slot.new_count, slot.skipped, len(slot.cursor.seen_ids))
         total_new += slot.new_count
 
+    _write_ingestion_log(Path(args.data_dir), slots, total_new)
     return total_new
 
 

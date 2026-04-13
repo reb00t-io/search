@@ -596,6 +596,14 @@ def _get_index_stats():
     # Active ingestion schedule (written by ingestion service on startup)
     stats["schedule"] = _read_ingestion_schedule(data_dir)
 
+    # Last ingestion cycle log (written by ingestion after each cycle)
+    ingestion_log_path = data_dir / "stats" / "last_ingestion.json"
+    if ingestion_log_path.exists():
+        try:
+            stats["last_ingestion"] = json.loads(ingestion_log_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            pass
+
     return stats
 
 

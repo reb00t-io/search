@@ -189,6 +189,71 @@
       max-height: 320px;
     }
 
+    /* Ingestion log */
+    .ingestion-log {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .ingestion-log .title {
+      font-size: 0.75rem;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.75rem;
+    }
+
+    .ingestion-log .timestamp {
+      font-size: 0.8rem;
+      color: #64748b;
+      margin-bottom: 0.75rem;
+    }
+
+    .ingestion-log table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+
+    .ingestion-log th {
+      text-align: left;
+      font-weight: 600;
+      color: #475569;
+      padding: 0.4rem 0.75rem;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .ingestion-log td {
+      padding: 0.4rem 0.75rem;
+      border-bottom: 1px solid #f1f5f9;
+    }
+
+    .ingestion-log td.num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .ingestion-log .tag {
+      display: inline-block;
+      font-size: 0.7rem;
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+
+    .ingestion-log .tag.hit-limit { background: #dbeafe; color: #1d4ed8; }
+    .ingestion-log .tag.exhausted { background: #f3e8ff; color: #7c3aed; }
+    .ingestion-log .tag.no-new    { background: #f1f5f9; color: #64748b; }
+
+    .ingestion-log .total-row td {
+      font-weight: 700;
+      border-top: 2px solid #e2e8f0;
+      border-bottom: none;
+    }
+
     .no-history {
       text-align: center;
       padding: 2rem;
@@ -243,6 +308,8 @@
     <div class="loading">Loading stats...</div>
   </div>
 
+  <div id="ingestion-log"></div>
+
   <div class="section">
     <h2>History</h2>
     <div class="chart-container" id="chart-section" style="display:none;">
@@ -268,6 +335,7 @@
       const stats = await res.json();
       renderSchedule(stats.schedule);
       renderStats(stats);
+      renderIngestionLog(stats.last_ingestion);
     } catch (err) {
       container.innerHTML = `<div class="error">${err.message}</div>`;
       renderSchedule(null);
@@ -374,6 +442,57 @@
     const div = document.createElement('div');
     div.textContent = text || '';
     return div.innerHTML;
+  }
+
+  // ─── Ingestion log ────────────────────────────────────────────────────────
+  function renderIngestionLog(log) {
+    const container = document.getElementById('ingestion-log');
+    if (!log || !log.sources) return;
+
+    const ts = new Date(log.timestamp);
+    const fmtTs = ts.toLocaleString('de-DE', {
+      dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Berlin',
+    });
+
+    let rows = '';
+    let totalNew = 0, totalSkipped = 0;
+    for (const [src, info] of Object.entries(log.sources)) {
+      totalNew += info.new;
+      totalSkipped += info.skipped;
+
+      let tag = '';
+      if (info.new === 0) {
+        tag = '<span class="tag no-new">no new</span>';
+      } else if (info.new >= info.limit) {
+        tag = '<span class="tag hit-limit">hit limit</span>';
+      } else if (info.exhausted) {
+        tag = '<span class="tag exhausted">exhausted</span>';
+      }
+
+      rows += `<tr>
+        <td>${escapeHtml(src)}</td>
+        <td class="num">${fmtNum(info.new)}</td>
+        <td class="num">${fmtNum(info.skipped)}</td>
+        <td class="num">${fmtNum(info.total_tracked)}</td>
+        <td>${tag}</td>
+      </tr>`;
+    }
+    rows += `<tr class="total-row">
+      <td>Total</td>
+      <td class="num">${fmtNum(totalNew)}</td>
+      <td class="num">${fmtNum(totalSkipped)}</td>
+      <td></td>
+      <td></td>
+    </tr>`;
+
+    container.innerHTML = `<div class="ingestion-log">
+      <div class="title">Last Ingestion</div>
+      <div class="timestamp">${escapeHtml(fmtTs)}</div>
+      <table>
+        <thead><tr><th>Source</th><th style="text-align:right">New</th><th style="text-align:right">Skipped</th><th style="text-align:right">Tracked</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
   }
 
   // ─── Chart ─────────────────────────────────────────────────────────────────
