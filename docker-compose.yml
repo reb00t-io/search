@@ -38,7 +38,7 @@ services:
       - INGESTION_DURATION_MINUTES=${INGESTION_DURATION_MINUTES:-360}
       - INGESTION_LIMIT_PER_SOURCE=${INGESTION_LIMIT_PER_SOURCE:-100}
       - INGESTION_TZ=${INGESTION_TZ:-Europe/Berlin}
-      - INGESTION_SOURCES=${INGESTION_SOURCES:-wiki,arxiv,gesetze,rechtsprechung,pubmed,rki,tagesschau,dw}
+      - INGESTION_SOURCES=${INGESTION_SOURCES:-wiki,arxiv,gesetze,rechtsprechung,bmf,pubmed,rki,tagesschau,dw}
       # Used for the per-window stats snapshot appended to data/stats/history.jsonl
       - QDRANT_URL=http://qdrant:6333
     volumes:

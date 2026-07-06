@@ -19,7 +19,7 @@ Sources to add for reasonable coverage:
 ### Law / Government
 See `docs/german-law-sources.md` for the full German tax/law source plan and status.
 - [x] **Rechtsprechung im Internet** — federal court decisions (BVerfG, BGH, BVerwG, BFH, …), BFH prioritized
-- [ ] **BMF-Schreiben** — tax administration guidance; PDF extraction pipeline needed
+- [x] **BMF-Schreiben** — sitemap discovery + PDF extraction via pypdf (current Schreiben; historic archive still open)
 - [ ] **BMF Amtliche Handbücher** — official tax handbooks (Richtlinien/Hinweise); needs crawler
 - [ ] **Bundestag DIP** — legislative materials; REST API, requires API key
 - [ ] **EUR-Lex** — EU legislation, bulk download available, DE+EN (start with curated CELEX list)

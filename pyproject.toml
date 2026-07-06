@@ -18,6 +18,7 @@ dependencies = [
   "uvicorn==0.40.0",
   "httpx>=0.28",
   "mwparserfromhell>=0.6",
+  "pypdf>=5.1",
   "qdrant-client>=1.12",
 ]
 

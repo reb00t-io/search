@@ -52,7 +52,7 @@ async def _local_search(session: aiohttp.ClientSession, query: str, max_results:
         "results": results[:max_results],
         "usage_instructions": (
             "These results come from the local search index (Wikipedia, arXiv, German federal law, "
-            "German federal court decisions, PubMed, news). "
+            "German federal court decisions, BMF-Schreiben, PubMed, news). "
             "Use them to answer the user's question. Cite sources with URLs when relevant."
         ),
     }

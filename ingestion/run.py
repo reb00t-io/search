@@ -32,6 +32,7 @@ from zoneinfo import ZoneInfo
 
 from ingestion.arxiv_adapter import ArxivAdapter
 from ingestion.base import Document
+from ingestion.bmf import BmfAdapter
 from ingestion.cursor import IdCursor
 from ingestion.gesetze import GesetzeAdapter
 from ingestion.pubmed import PubmedAdapter
@@ -49,6 +50,7 @@ ADAPTERS = {
     "arxiv": ArxivAdapter,
     "gesetze": GesetzeAdapter,
     "rechtsprechung": RechtsprechungAdapter,
+    "bmf": BmfAdapter,
     "pubmed": PubmedAdapter,
     "rki": RkiAdapter,
     "tagesschau": TagesschauAdapter,
@@ -370,7 +372,7 @@ def main():
                         help="Max new documents per source per cycle")
     parser.add_argument("--data-dir", default=_env_str("INGESTION_DATA_DIR", "data"), help="Data directory")
     parser.add_argument("--sources",
-                        default=_env_str("INGESTION_SOURCES", "wiki,arxiv,gesetze,rechtsprechung,pubmed,rki,tagesschau,dw"),
+                        default=_env_str("INGESTION_SOURCES", "wiki,arxiv,gesetze,rechtsprechung,bmf,pubmed,rki,tagesschau,dw"),
                         help="Comma-separated source names")
     parser.add_argument("--batch-size", type=int, default=3, help="Documents to pull per source per round")
     parser.add_argument("--once", action="store_true", help="Run one cycle and exit (ignore time window)")

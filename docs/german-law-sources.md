@@ -37,7 +37,7 @@ GrEStG, ErbStG, BewG, FGO, StBerG, BGB, ZPO, InsO, BDSG.
 | **Gesetze im Internet** (gesetze-im-internet.de) | All federal statutes and regulations | ✅ **Integrated** (`ingestion/gesetze.py`) | juris TOC XML (`gii-toc.xml`) + one XML zip per law. High-value statutes now prioritized via `PRIORITY_LAWS`. |
 | **Rechtsprechung im Internet** (rechtsprechung-im-internet.de) | Federal case law since ~2010: BVerfG, BGH, BVerwG, **BFH**, BAG, BSG, BPatG | ✅ **Integrated** (`ingestion/rechtsprechung.py`) | Same juris infrastructure: `rii-toc.xml` + one XML zip per decision (Leitsatz, Tenor, Tatbestand, Gründe). BFH (tax) decisions ingested first, then newest-first. Covers plan items 4 *and* 5. |
 | **BFH V/NV decision search** (bundesfinanzhof.de) | Tax case law, weekly updates | ⚠️ Partially covered | BFH decisions arrive via Rechtsprechung im Internet. The BFH website has no stable machine-readable bulk interface; revisit for freshness (weekly RSS scraping) if the rii feed lags. |
-| **BMF-Schreiben** (bundesfinanzministerium.de) | Tax administration guidance | ❌ Not integrated | Published as HTML listing + **PDF** documents; no machine-readable feed found (probed RSS endpoints return 404). Needs a PDF-extraction pipeline (e.g. `pypdf`/`pdfplumber`) + listing scraper. Highest-value missing source for practical tax questions. |
+| **BMF-Schreiben** (bundesfinanzministerium.de) | Tax administration guidance | ✅ **Integrated** (`ingestion/bmf.py`) | HTML listing pages are behind a Radware bot wall, but `sitemap.xml` and the PDFs themselves are openly accessible. Discovery via sitemap (~400 current Schreiben), PDF URL derived from the detail-page URL, text extracted with `pypdf`. Titles from PDF metadata, GZ from the letterhead. **Limitation:** the sitemap only exposes current/recent Schreiben, not the historic archive. |
 | **BMF Amtliche Handbücher** (bmf-esth.de etc.) | Official tax handbooks (ESt, KSt, GewSt, AO, LSt, …) by assessment year | ❌ Not integrated | Online handbooks are HTML but deeply nested per-paragraph navigation without a bulk export; needs a dedicated crawler per handbook. Much of the primary content (statutes) is already covered via Gesetze im Internet; the added value is Richtlinien/Hinweise. |
 | **Bundesgesetzblatt** (recht.bund.de) | Legally binding promulgated laws, change tracking | ❌ Not integrated | Open data access exists but documents are PDF-first; value is *change tracking*, not corpus content (consolidated texts already come from Gesetze im Internet). Revisit together with NeuRIS. |
 | **NeuRIS** (neuris.bund.de) | Successor platform: laws + case law as open data with APIs | ❌ Not integrated (watch) | Still being rolled out; once its API covers consolidated federal law it can replace the juris XML scraping. |
@@ -61,10 +61,12 @@ GrEStG, ErbStG, BewG, FGO, StBerG, BGB, ZPO, InsO, BDSG.
 
 ## Next steps (ordered by value)
 
-1. **BMF-Schreiben PDF pipeline** — biggest practical-tax gap; needs PDF text
-   extraction plus a listing scraper.
-2. **DIP adapter** — register for an API key, then a thin JSON adapter.
-3. **EUR-Lex curated ingestion** — start with a handpicked CELEX list (VAT
+1. **DIP adapter** — register for an API key, then a thin JSON adapter.
+2. **EUR-Lex curated ingestion** — start with a handpicked CELEX list (VAT
    directive, GDPR, AI Act) via the public REST interface.
-4. **BMF Amtliche Handbücher crawler** — Richtlinien/Hinweise text.
+3. **BMF Amtliche Handbücher crawler** — Richtlinien/Hinweise text; the
+   handbook subdomains (e.g. `esth.bundesfinanzministerium.de`) are *not*
+   bot-walled (verified), so a plain HTML crawler works.
+4. **BMF-Schreiben archive** — the sitemap only lists current Schreiben;
+   historic ones would need the (bot-walled) archive listing.
 5. **NeuRIS migration** — replace juris XML scraping when the API is stable.

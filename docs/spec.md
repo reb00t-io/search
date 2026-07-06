@@ -113,16 +113,22 @@ arXiv provides open-access scientific papers (~2.5M papers, growing ~15k/month).
 - `feedparser` for RSS polling
 - `beautifulsoup4` (already a dependency) for HTML extraction
 
-### 1.3a Source: German federal law & case law
+### 1.3a Source: German federal law, case law & tax guidance
 
-Two adapters ingest official German legal sources (content is copyright-free
-under § 5 UrhG). Both use the juris publishing infrastructure: a TOC XML
-listing one zip per document, each zip containing structured XML.
+Three adapters ingest official German legal sources (content is copyright-free
+under § 5 UrhG). The first two use the juris publishing infrastructure: a TOC
+XML listing one zip per document, each zip containing structured XML.
 
 - **`gesetze`** (`ingestion/gesetze.py`): all federal statutes/regulations from
   `gesetze-im-internet.de/gii-toc.xml`. High-value statutes for tax/law
   research (HGB, AO, EStG, KStG, UStG, BGB, … — `PRIORITY_LAWS`) are ingested
   before the rest of the alphabetical TOC. IDs: `gesetze:{slug}:{chunk}`.
+- **`bmf`** (`ingestion/bmf.py`): BMF-Schreiben (tax administration guidance)
+  from `bundesfinanzministerium.de`. The HTML listing is bot-walled, so
+  discovery goes through `sitemap.xml`; the PDF URL is derived from each
+  detail-page URL and text is extracted with `pypdf`. Titles come from PDF
+  metadata, dates from the URL slug, GZ from the letterhead.
+  IDs: `bmf:{slug}:{chunk}`.
 - **`rechtsprechung`** (`ingestion/rechtsprechung.py`): federal court decisions
   (BVerfG, BGH, BVerwG, BFH, BAG, BSG, BPatG) since ~2010 from
   `rechtsprechung-im-internet.de/rii-toc.xml`. Decision XML sections
@@ -530,6 +536,9 @@ The pipeline runs as a set of long-running processes, coordinated via a simple s
 # Ingestion — Wikipedia
 mwparserfromhell          # wikitext parsing
 mwxml                     # Wikipedia dump XML parsing
+
+# Ingestion — BMF-Schreiben
+pypdf                     # PDF text extraction
 
 # Ingestion — arXiv
 feedparser                # RSS feed parsing for arXiv updates
