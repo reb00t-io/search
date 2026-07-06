@@ -19,6 +19,32 @@ logger = logging.getLogger(__name__)
 
 TOC_URL = "https://www.gesetze-im-internet.de/gii-toc.xml"
 
+# High-value statutes for the German tax/law research assistant, ingested
+# before the rest of the (alphabetical) TOC. Matched against the URL slug
+# (e.g. "estg", "ao_1977" — slugs may carry a year suffix).
+PRIORITY_LAWS = [
+    "hgb", "gmbhg", "aktg", "umwg", "ao", "estg", "kstg", "gewstg", "ustg",
+    "grestg", "erbstg", "bewg", "fgo", "stberg", "bgb", "zpo", "inso", "bdsg",
+]
+
+_SLUG_RE = re.compile(r"gesetze-im-internet\.de/([^/]+)/")
+
+
+def _toc_priority(link: str) -> int:
+    """Rank a TOC entry: index into PRIORITY_LAWS, or len(PRIORITY_LAWS) if unlisted."""
+    match = _SLUG_RE.search(link)
+    if match:
+        slug = match.group(1).lower()
+        for i, abbrev in enumerate(PRIORITY_LAWS):
+            if slug == abbrev or slug.startswith(abbrev + "_"):
+                return i
+    return len(PRIORITY_LAWS)
+
+
+def sort_toc(entries: list[dict]) -> list[dict]:
+    """Move priority statutes to the front, keeping TOC order otherwise."""
+    return sorted(entries, key=lambda e: _toc_priority(e["link"]))
+
 
 def _xml_text(el: ET.Element | None) -> str:
     """Extract text content from an XML element, including tail text of children."""
@@ -122,7 +148,7 @@ class GesetzeAdapter(SourceAdapter):
             link = item.findtext("link", "").strip()
             if title and link:
                 entries.append({"title": title, "link": link})
-        return entries
+        return sort_toc(entries)
 
     def _fetch_law_xml(self, zip_url: str) -> str | None:
         """Download a law's XML zip and extract the XML content."""

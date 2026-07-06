@@ -452,6 +452,7 @@ async def chat_responses():
 
     return await post_chat_response(
         body={**body, "mode": normalized_mode},
+        rag_context_provider=_rag_context_provider,
         sessions=sessions,
         session_modes=session_modes,
         api_key=API_KEY,
@@ -466,6 +467,21 @@ async def chat_responses():
         llm_model=LLM_MODEL,
         stream_pace_seconds=STREAM_PACE_SECONDS,
     )
+
+
+async def _rag_context_provider(query: str) -> str | None:
+    """Retrieve RAG context for a chat prompt via semantic search.
+
+    Returns None when the search stack is unavailable so the chat degrades
+    gracefully to tool-only search.
+    """
+    import asyncio
+
+    if not _init_search():
+        return None
+    from serving.rag import build_rag_context
+    # Embedding + Qdrant query are synchronous; keep the event loop free.
+    return await asyncio.to_thread(build_rag_context, _search_client, query)
 
 
 # --- Search API ---

@@ -1,6 +1,6 @@
 """Tests for the gesetze-im-internet.de adapter."""
 
-from ingestion.gesetze import _parse_law_xml, _xml_text
+from ingestion.gesetze import PRIORITY_LAWS, _parse_law_xml, _toc_priority, _xml_text, sort_toc
 import xml.etree.ElementTree as ET
 
 
@@ -61,3 +61,31 @@ class TestParseLawXml:
     def test_handles_invalid_xml(self):
         sections = _parse_law_xml("not xml at all")
         assert sections == []
+
+
+class TestTocPriority:
+    def test_priority_law_ranks_before_unlisted(self):
+        estg = "http://www.gesetze-im-internet.de/estg/xml.zip"
+        other = "http://www.gesetze-im-internet.de/zzz-verordnung/xml.zip"
+        assert _toc_priority(estg) < _toc_priority(other)
+
+    def test_slug_with_year_suffix_matches(self):
+        ao = "http://www.gesetze-im-internet.de/ao_1977/xml.zip"
+        assert _toc_priority(ao) < len(PRIORITY_LAWS)
+
+    def test_prefix_without_underscore_does_not_match(self):
+        # "aok..." must not match the "ao" priority entry
+        aok = "http://www.gesetze-im-internet.de/aokweitg/xml.zip"
+        assert _toc_priority(aok) == len(PRIORITY_LAWS)
+
+    def test_sort_toc_moves_priority_laws_first(self):
+        entries = [
+            {"title": "A-Verordnung", "link": "http://www.gesetze-im-internet.de/averordnung/xml.zip"},
+            {"title": "Handelsgesetzbuch", "link": "http://www.gesetze-im-internet.de/hgb/xml.zip"},
+            {"title": "Abgabenordnung", "link": "http://www.gesetze-im-internet.de/ao_1977/xml.zip"},
+        ]
+        ordered = sort_toc(entries)
+        # HGB is listed before AO in PRIORITY_LAWS; unlisted law comes last
+        assert [e["title"] for e in ordered] == [
+            "Handelsgesetzbuch", "Abgabenordnung", "A-Verordnung",
+        ]

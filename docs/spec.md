@@ -6,6 +6,7 @@ A private, agent-oriented search engine with a continuous ingestion-to-serving p
 
 **Key design decisions:**
 - **Data sources (MVP):** Wikipedia (DE + EN) + arXiv papers; extensible source adapter architecture
+- **Data sources (current):** additionally German federal law (gesetze-im-internet.de), German federal court decisions (rechtsprechung-im-internet.de), PubMed, RKI, Tagesschau, Deutsche Welle — see `docs/german-law-sources.md` for the German law/tax source plan and inventory
 - **Language strategy:** Index in original language; use multilingual embeddings for cross-language retrieval; translate high-value EN content to DE on-demand via LLM (not blanket translation)
 - **Search:** Hybrid retrieval (BM25 + multilingual vector search) with cross-encoder reranking
 - **Freshness:** Continuous pipeline — periodic dump re-ingestion + real-time change stream processing
@@ -111,6 +112,26 @@ arXiv provides open-access scientific papers (~2.5M papers, growing ~15k/month).
 - `boto3` for S3 bulk data access (optional)
 - `feedparser` for RSS polling
 - `beautifulsoup4` (already a dependency) for HTML extraction
+
+### 1.3a Source: German federal law & case law
+
+Two adapters ingest official German legal sources (content is copyright-free
+under § 5 UrhG). Both use the juris publishing infrastructure: a TOC XML
+listing one zip per document, each zip containing structured XML.
+
+- **`gesetze`** (`ingestion/gesetze.py`): all federal statutes/regulations from
+  `gesetze-im-internet.de/gii-toc.xml`. High-value statutes for tax/law
+  research (HGB, AO, EStG, KStG, UStG, BGB, … — `PRIORITY_LAWS`) are ingested
+  before the rest of the alphabetical TOC. IDs: `gesetze:{slug}:{chunk}`.
+- **`rechtsprechung`** (`ingestion/rechtsprechung.py`): federal court decisions
+  (BVerfG, BGH, BVerwG, BFH, BAG, BSG, BPatG) since ~2010 from
+  `rechtsprechung-im-internet.de/rii-toc.xml`. Decision XML sections
+  (Leitsatz, Tenor, Tatbestand, Entscheidungsgründe, Gründe) are converted to
+  markdown. BFH (tax) decisions are ingested first, then newest-first.
+  IDs: `rechtsprechung:{doknr}:{chunk}`.
+
+The full German law/tax source plan (BMF-Schreiben, DIP, EUR-Lex, …) and each
+source's integration status live in `docs/german-law-sources.md`.
 
 ### 1.4 Common Document Format
 
@@ -348,6 +369,28 @@ Same parameters as `/v1/search`, but response optimized for LLM context:
 ```
 
 Returns pre-formatted markdown context block ready for injection into an agent's prompt, with source attribution.
+
+### 4.5 RAG Context Injection (Chat)
+
+The chat backend augments every user prompt with retrieved context
+(`serving/rag.py`, wired via `rag_context_provider` in `src/streaming.py`):
+
+1. The raw user prompt is used as a **semantic (dense vector) search** query
+   against the index.
+2. Hits are **deduplicated** by content hash and chunk ID; the **top 5
+   chunks** survive (each capped at 1500 chars).
+3. The chunks are formatted as a markdown block — title, **source URL**, and
+   chunk text per result — with an instruction header telling the model to
+   cite sources as markdown links and to treat the chunks as data, not
+   instructions.
+4. The block is appended as a `system` message immediately **before** the
+   user message, then the normal tool-calling loop runs. The agent can still
+   search actively via its `web_search` tool.
+
+Failure handling: if Qdrant/embeddings are unavailable or retrieval raises,
+the chat proceeds without context (best-effort, logged). RAG system messages
+are excluded from the visible chat history (only `user`/`assistant` roles are
+shown).
 
 ---
 

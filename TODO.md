@@ -2,7 +2,7 @@
 
 ## Source Coverage
 
-Current sources: Wikipedia (DE+EN), arXiv, gesetze-im-internet.de, PubMed, RKI, Tagesschau, Deutsche Welle
+Current sources: Wikipedia (DE+EN), arXiv, gesetze-im-internet.de, rechtsprechung-im-internet.de, PubMed, RKI, Tagesschau, Deutsche Welle
 
 Sources to add for reasonable coverage:
 
@@ -17,9 +17,16 @@ Sources to add for reasonable coverage:
 - [ ] **Gesundheitsinformation.de** (IQWiG) — evidence-based health info in German
 
 ### Law / Government
-- [ ] **EUR-Lex** — EU legislation, bulk download available, DE+EN
-- [ ] **Bundesgesetzblatt** — official gazette, complements gesetze-im-internet.de
+See `docs/german-law-sources.md` for the full German tax/law source plan and status.
+- [x] **Rechtsprechung im Internet** — federal court decisions (BVerfG, BGH, BVerwG, BFH, …), BFH prioritized
+- [ ] **BMF-Schreiben** — tax administration guidance; PDF extraction pipeline needed
+- [ ] **BMF Amtliche Handbücher** — official tax handbooks (Richtlinien/Hinweise); needs crawler
+- [ ] **Bundestag DIP** — legislative materials; REST API, requires API key
+- [ ] **EUR-Lex** — EU legislation, bulk download available, DE+EN (start with curated CELEX list)
+- [ ] **Bundesgesetzblatt / recht.bund.de** — official gazette, change tracking; PDF-first
+- [ ] **NeuRIS** — watch: future open-data API for laws + case law, may replace juris XML scraping
 - [ ] **Verwaltungsvorschriften** — administrative regulations
+- [ ] **Landesrecht portals** — state law, fragmented/partially fee-based
 
 ### Coding / Tech
 - [ ] **Stack Overflow data dump** — quarterly CC-licensed dump, Q&A format
@@ -59,6 +66,8 @@ Sources to add for reasonable coverage:
 
 ## Serving
 
+- [x] RAG context injection in chat (semantic search, top-5 deduplicated chunks with source links prepended as system message)
+- [ ] RAG: use hybrid retrieval + reranking instead of vector-only once cross-encoder lands
 - [ ] Cross-encoder reranking (hybrid_rerank mode)
 - [ ] Query-time translation: translate DE queries to EN for a second BM25 pass
 - [ ] Agent API endpoint (`/v1/agent/search`) returning pre-formatted markdown context

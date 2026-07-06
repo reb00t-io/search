@@ -322,6 +322,7 @@ async def post_chat_response(
     save_sessions: Callable[[], None],
     on_session_start: Callable[[str, str], None] | None = None,
     tools: list[dict] | None = None,
+    rag_context_provider: Callable[[str], Any] | None = None,
     client_factory,
     llm_base_url: str,
     llm_api_key: str,
@@ -350,6 +351,16 @@ async def post_chat_response(
         session_modes.setdefault(session_id, mode)
     messages = sessions[session_id]
     if prompt:
+        # RAG: prepend semantic search results for the user query as a system
+        # message. Best-effort — any failure must not break the chat.
+        if rag_context_provider is not None:
+            try:
+                rag_context = await rag_context_provider(prompt)
+            except Exception:
+                logger.exception("RAG context retrieval failed; continuing without context")
+                rag_context = None
+            if rag_context:
+                messages.append({"role": "system", "content": rag_context})
         messages.append({"role": "user", "content": prompt})
     if tool_results:
         append_tool_result_messages(messages, tool_results)

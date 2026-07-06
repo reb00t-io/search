@@ -99,6 +99,14 @@ def request_log_path(tmp_path, monkeypatch) -> Path:
 
 
 @pytest.fixture(autouse=True)
+def disable_rag(monkeypatch):
+    """Keep chat tests hermetic — no Qdrant/embedding calls from the RAG hook."""
+    async def _no_rag(query):
+        return None
+    monkeypatch.setattr(main_module, "_rag_context_provider", _no_rag)
+
+
+@pytest.fixture(autouse=True)
 def reset_sessions():
     sessions.clear()
     session_modes.clear()
@@ -549,3 +557,61 @@ async def test_tool_messages_are_hidden_from_history_endpoints(client):
         {"role": "assistant", "content": "hello"},
     ]
     assert latest["messages"] == history["messages"]
+
+
+# ─── RAG context ─────────────────────────────────────────────────────────────
+
+async def test_rag_context_prepended_as_system_message(client):
+    async def fake_rag(query):
+        return f"RAG context for: {query}"
+
+    with mock_llm(), patch.object(main_module, "_rag_context_provider", fake_rag):
+        resp = await client.post("/v1/responses", json={"prompt": "hello"})
+        await resp.get_data()
+
+    sid = resp.headers.get("X-Session-Id")
+    messages = sessions[sid]
+    # system prompt, RAG system message, user, assistant
+    assert messages[1] == {"role": "system", "content": "RAG context for: hello"}
+    assert messages[2] == {"role": "user", "content": "hello"}
+
+
+async def test_rag_context_hidden_from_history_endpoints(client):
+    async def fake_rag(query):
+        return "RAG context"
+
+    with mock_llm(_sse("answer")), patch.object(main_module, "_rag_context_provider", fake_rag):
+        resp = await client.post("/v1/responses", json={"prompt": "question"})
+        await resp.get_data()
+
+    sid = resp.headers.get("X-Session-Id")
+    history = await (await client.get(f"/v1/responses/{sid}")).get_json()
+    assert history["messages"] == [
+        {"role": "user", "content": "question"},
+        {"role": "assistant", "content": "answer"},
+    ]
+
+
+async def test_rag_returning_none_adds_no_system_message(client):
+    with mock_llm():
+        resp = await client.post("/v1/responses", json={"prompt": "hello"})
+        await resp.get_data()
+
+    sid = resp.headers.get("X-Session-Id")
+    messages = sessions[sid]
+    assert messages[1] == {"role": "user", "content": "hello"}
+
+
+async def test_rag_failure_does_not_break_chat(client):
+    async def failing_rag(query):
+        raise RuntimeError("qdrant down")
+
+    with mock_llm(), patch.object(main_module, "_rag_context_provider", failing_rag):
+        resp = await client.post("/v1/responses", json={"prompt": "hello"})
+        body = await resp.get_data()
+
+    assert resp.status_code == 200
+    sid = resp.headers.get("X-Session-Id")
+    messages = sessions[sid]
+    assert messages[1] == {"role": "user", "content": "hello"}
+    assert b"[DONE]" in body
