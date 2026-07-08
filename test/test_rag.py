@@ -81,6 +81,9 @@ class TestFormatRagContext:
         assert "(gesetze)" in context
         # Instructional header present
         assert "reference data" in context
+        # Doc ID reference for full-text retrieval via /v1/doc
+        assert "ID: gesetze:estg:0" in context
+        assert "/v1/doc?id=" in context
 
     def test_numbers_results(self):
         chunks = dedupe_chunks([

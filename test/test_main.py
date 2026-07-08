@@ -615,3 +615,69 @@ async def test_rag_failure_does_not_break_chat(client):
     messages = sessions[sid]
     assert messages[1] == {"role": "user", "content": "hello"}
     assert b"[DONE]" in body
+
+
+# ─── /v1/doc ─────────────────────────────────────────────────────────────────
+
+@pytest.fixture()
+def doc_data_dir(tmp_path, monkeypatch):
+    """Point the doc endpoint at a tmp data dir with one stored document."""
+    import json as _json
+    from ingestion.base import Document
+    from ingestion.storage import ContentStore
+
+    store = ContentStore(tmp_path)
+    filtered_dir = tmp_path / "filtered"
+    filtered_dir.mkdir(parents=True, exist_ok=True)
+    with open(filtered_dir / "documents.jsonl", "w", encoding="utf-8") as f:
+        for chunk_idx, text in enumerate(["§ 1 Inhalt eins.", "§ 2 Inhalt zwei."]):
+            doc = Document(
+                id=f"gesetze:testg:{chunk_idx}", source="gesetze", title="Testgesetz",
+                url="https://www.gesetze-im-internet.de/testg/", language="de",
+                text=text, timestamp="2026-01-01",
+            )
+            content_hash = store.store(doc)
+            f.write(_json.dumps({
+                "id": doc.id, "source": doc.source, "title": doc.title,
+                "url": doc.url, "language": doc.language,
+                "content_hash": content_hash, "timestamp": doc.timestamp,
+            }) + "\n")
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(main_module, "_doc_lookup", None)
+    monkeypatch.setattr(main_module, "_doc_lookup_dir", None)
+    return tmp_path
+
+
+async def test_doc_endpoint_returns_chunk(client, doc_data_dir):
+    resp = await client.get("/v1/doc?id=gesetze:testg:1")
+    assert resp.status_code == 200
+    data = await resp.get_json()
+    assert data["text"] == "§ 2 Inhalt zwei."
+    assert data["title"] == "Testgesetz"
+    assert data["url"] == "https://www.gesetze-im-internet.de/testg/"
+
+
+async def test_doc_endpoint_returns_full_document_for_base_id(client, doc_data_dir):
+    resp = await client.get("/v1/doc?id=gesetze:testg")
+    assert resp.status_code == 200
+    data = await resp.get_json()
+    assert data["text"] == "§ 1 Inhalt eins.\n\n§ 2 Inhalt zwei."
+    assert data["chunks"] == 2
+
+
+async def test_doc_endpoint_unknown_id_returns_404(client, doc_data_dir):
+    resp = await client.get("/v1/doc?id=gesetze:unbekannt:0")
+    assert resp.status_code == 404
+
+
+async def test_doc_endpoint_missing_id_returns_400(client, doc_data_dir):
+    resp = await client.get("/v1/doc")
+    assert resp.status_code == 400
+
+
+async def test_doc_endpoint_max_chars(client, doc_data_dir):
+    resp = await client.get("/v1/doc?id=gesetze:testg&max_chars=10")
+    data = await resp.get_json()
+    assert len(data["text"]) == 10
+    assert data["truncated"] is True

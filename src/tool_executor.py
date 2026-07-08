@@ -41,6 +41,7 @@ async def _local_search(session: aiohttp.ClientSession, query: str, max_results:
         # Strip **bold** markers from snippet
         snippet = (r.get("snippet") or "").replace("**", "")
         results.append({
+            "id": r.get("id", ""),
             "title": r.get("title", ""),
             "snippet": snippet,
             "url": r.get("url", ""),
@@ -53,7 +54,9 @@ async def _local_search(session: aiohttp.ClientSession, query: str, max_results:
         "usage_instructions": (
             "These results come from the local search index (Wikipedia, arXiv, German federal law, "
             "German federal court decisions, BMF-Schreiben, PubMed, news). "
-            "Use them to answer the user's question. Cite sources with URLs when relevant."
+            "Use them to answer the user's question. Cite sources with URLs when relevant. "
+            "Snippets are excerpts; to read a result's full text, call fetch_url with "
+            f"http://localhost:{SEARCH_SERVICE_PORT}/v1/doc?id=<result id>."
         ),
     }
 

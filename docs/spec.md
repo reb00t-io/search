@@ -398,6 +398,21 @@ the chat proceeds without context (best-effort, logged). RAG system messages
 are excluded from the visible chat history (only `user`/`assistant` roles are
 shown).
 
+### 4.5a Full-Document API
+
+`GET /v1/doc?id=<doc_id>[&max_chars=N]` (`serving/documents.py`) — returns the
+complete stored markdown for a document, resolving the snippet truncation of
+search/RAG results (payload text is capped at 2000 chars; content files are
+not). Accepts a chunk ID (`gesetze:estg:3`) or a base document ID
+(`gesetze:estg` — all chunks concatenated in order). Response:
+`{id, title, url, source, language, timestamp, chunks, text, truncated}`.
+404 for unknown IDs; `max_chars` defaults to 100k (cap 500k).
+
+Lookup data comes from `filtered/documents.jsonl` (cached in memory, reloaded
+when the file grows) and text from the content store. RAG context blocks and
+`web_search` tool results reference this endpoint (each result carries its
+`ID:`), so agents can fetch a source verbatim before quoting it.
+
 ### 4.6 OpenAI-Compatible Endpoint (Agents)
 
 `POST /v1/chat/completions` (`src/chat_completions.py`) — a **stateless**

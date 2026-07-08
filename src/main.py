@@ -575,6 +575,42 @@ async def search_endpoint():
     return jsonify(result)
 
 
+# --- Full-document API ---
+_doc_lookup = None
+_doc_lookup_dir = None
+
+DOC_MAX_CHARS_DEFAULT = 100_000
+DOC_MAX_CHARS_LIMIT = 500_000
+
+
+def _get_doc_lookup():
+    """Cached DocumentLookup for the active DATA_DIR (recreated if it changes)."""
+    global _doc_lookup, _doc_lookup_dir
+    from serving.documents import DocumentLookup
+
+    data_dir = os.environ.get("DATA_DIR", "data")
+    if _doc_lookup is None or _doc_lookup_dir != data_dir:
+        _doc_lookup = DocumentLookup(data_dir)
+        _doc_lookup_dir = data_dir
+    return _doc_lookup
+
+
+@app.route("/v1/doc", methods=["GET"])
+async def doc_endpoint():
+    """Return the full stored text for a chunk ID or base document ID."""
+    doc_id = request.args.get("id", "").strip()
+    if not doc_id:
+        return jsonify({"error": "Query parameter 'id' is required"}), 400
+    max_chars = min(int(request.args.get("max_chars", str(DOC_MAX_CHARS_DEFAULT))),
+                    DOC_MAX_CHARS_LIMIT)
+
+    from serving.documents import fetch_document
+    result = fetch_document(_get_doc_lookup(), doc_id, max_chars)
+    if result is None:
+        return jsonify({"error": f"Unknown document id: {doc_id}"}), 404
+    return jsonify(result)
+
+
 def _read_ingestion_schedule(data_dir: Path) -> dict | None:
     """Read the active ingestion schedule written by the ingestion service on startup."""
     schedule_path = data_dir / "ingestion_schedule.json"
