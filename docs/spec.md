@@ -398,6 +398,25 @@ the chat proceeds without context (best-effort, logged). RAG system messages
 are excluded from the visible chat history (only `user`/`assistant` roles are
 shown).
 
+### 4.6 OpenAI-Compatible Endpoint (Agents)
+
+`POST /v1/chat/completions` (`src/chat_completions.py`) — a **stateless**
+OpenAI-compatible proxy for agent clients (e.g. tax-agent) that own their
+conversation history and tool loop. Contrast with `/v1/responses` (stateful,
+server-side tool execution, used by the web UI):
+
+- The client sends the full message list every request; nothing is stored in
+  sessions.
+- `tools` are forwarded to the LLM untouched and tool calls stream back to
+  the client — the server never executes tools on this path. Clients call
+  `GET /v1/search` directly to implement a search tool.
+- RAG injection (see 4.5) runs per request unless disabled with the
+  non-standard body field `"rag": false` (stripped before forwarding).
+- The `model` field is overridden with the backend's configured model.
+- Streaming (`"stream": true`) relays the upstream SSE bytes verbatim;
+  non-streaming returns the upstream JSON with its status code.
+- Auth: same `Authorization: Bearer <API_KEY>` as the other endpoints.
+
 ---
 
 ## Stage 5: Frontend

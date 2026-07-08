@@ -16,10 +16,12 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 try:
+    from .chat_completions import post_chat_completions
     from .runtime_logs import configure_runtime_log_capture
     from .streaming import get_session_response, post_chat_response
     from .tool_schemas import DEFAULT_MODE, DEV_MODE, USER_MODE, get_tools_for_mode
 except ImportError:
+    from chat_completions import post_chat_completions
     from runtime_logs import configure_runtime_log_capture
     from streaming import get_session_response, post_chat_response
     from tool_schemas import DEFAULT_MODE, DEV_MODE, USER_MODE, get_tools_for_mode
@@ -466,6 +468,25 @@ async def chat_responses():
         llm_api_key=LLM_API_KEY,
         llm_model=LLM_MODEL,
         stream_pace_seconds=STREAM_PACE_SECONDS,
+    )
+
+
+@app.route("/v1/chat/completions", methods=["POST"])
+async def chat_completions():
+    """Stateless OpenAI-compatible endpoint for agent clients.
+
+    No sessions, no server-side tools — see src/chat_completions.py.
+    """
+    body = await request.get_json(force=True)
+    return await post_chat_completions(
+        body=body if isinstance(body, dict) else {},
+        api_key=API_KEY,
+        authorization=request.headers.get("Authorization", ""),
+        rag_context_provider=_rag_context_provider,
+        client_factory=httpx.AsyncClient,
+        llm_base_url=LLM_BASE_URL,
+        llm_api_key=LLM_API_KEY,
+        llm_model=LLM_MODEL,
     )
 
 
