@@ -243,3 +243,64 @@ class TestLastUserMessage:
 
     def test_no_user_message(self):
         assert _last_user_message([{"role": "system", "content": "s"}]) == (-1, "")
+
+
+TOOL_HISTORY = [
+    {"role": "user", "content": "Wie hoch ist der Steuersatz?"},
+    {"role": "assistant", "content": None, "tool_calls": [
+        {"id": "c1", "type": "function",
+         "function": {"name": "search_law", "arguments": '{"q": "Steuersatz"}'}},
+    ]},
+    {"role": "tool", "tool_call_id": "c1", "content": '[{"id": "gesetze:kstg-1977:23"}]'},
+    {"role": "user", "content": "Antworte jetzt."},
+]
+
+SEARCH_TOOL_DEF = [{"type": "function", "function": {"name": "search_law", "parameters": {}}}]
+
+
+@pytest.mark.asyncio
+async def test_tool_choice_none_flattens_history_and_strips_tools(client):
+    captured = []
+    with mock_upstream(capture=captured):
+        resp = await client.post("/v1/chat/completions", json={
+            "messages": TOOL_HISTORY, "tools": SEARCH_TOOL_DEF,
+            "tool_choice": "none", "rag": False,
+        })
+    assert resp.status_code == 200
+    body = captured[0]["body"]
+    assert "tools" not in body and "tool_choice" not in body
+    roles = [m["role"] for m in body["messages"]]
+    assert "tool" not in roles
+    assert not any(m.get("tool_calls") for m in body["messages"])
+    flat_text = json.dumps(body["messages"], ensure_ascii=False)
+    assert "search_law" in flat_text  # tool activity preserved as text
+    assert "gesetze:kstg-1977:23" in flat_text  # tool results preserved as text
+    last = body["messages"][-1]
+    assert last["role"] == "system" and "Recherche ist abgeschlossen" in last["content"]
+
+
+@pytest.mark.asyncio
+async def test_tool_history_without_tools_is_flattened(client):
+    captured = []
+    with mock_upstream(capture=captured):
+        resp = await client.post("/v1/chat/completions", json={
+            "messages": TOOL_HISTORY, "rag": False,
+        })
+    assert resp.status_code == 200
+    roles = [m["role"] for m in captured[0]["body"]["messages"]]
+    assert "tool" not in roles
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_requests_stay_untouched(client):
+    """Normal tool-loop turns (tools defined, no tool_choice=none) are forwarded verbatim."""
+    captured = []
+    with mock_upstream(capture=captured):
+        resp = await client.post("/v1/chat/completions", json={
+            "messages": TOOL_HISTORY, "tools": SEARCH_TOOL_DEF, "rag": False,
+        })
+    assert resp.status_code == 200
+    body = captured[0]["body"]
+    assert body["tools"] == SEARCH_TOOL_DEF
+    assert body["messages"][2]["role"] == "tool"
+    assert body["messages"][1]["tool_calls"][0]["id"] == "c1"

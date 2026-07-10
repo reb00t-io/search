@@ -13,9 +13,16 @@ from collections.abc import Iterator
 import httpx
 
 from ingestion.base import Document, SourceAdapter
-from ingestion.chunking import chunk_text
+from ingestion.chunking import MAX_CHUNK_WORDS, chunk_text
 
 logger = logging.getLogger(__name__)
+
+# §-aligned chunking: one chunk per section; consecutive tiny sections are
+# merged so chunks stay above the filter's minimum length, and a section is
+# only ever split when it alone exceeds MAX_CHUNK_WORDS. Small targets keep
+# retrieval §-precise ("§ 23 KStG" should hit the chunk containing § 23).
+SECTION_TARGET_WORDS = 300
+SECTION_MIN_WORDS = 40
 
 TOC_URL = "https://www.gesetze-im-internet.de/gii-toc.xml"
 
@@ -123,6 +130,91 @@ def _parse_law_xml(xml_text: str) -> list[dict]:
     return sections
 
 
+def _section_header(section: dict) -> str:
+    if section["section_num"]:
+        header = f"## {section['section_num']}"
+        if section["section_title"]:
+            header += f" {section['section_title']}"
+        return header
+    if section["section_title"]:
+        return f"## {section['section_title']}"
+    return ""
+
+
+def build_section_chunks(
+    sections: list[dict],
+    law_title: str,
+    law_abbrev: str,
+    target_words: int = SECTION_TARGET_WORDS,
+    min_words: int = SECTION_MIN_WORDS,
+) -> list[dict]:
+    """Chunk a law along § boundaries.
+
+    Returns [{"text": ..., "sections": ["§ 22", "§ 23", ...]}, ...] where
+    - every chunk starts with a `# <law title> (<abbrev>)` line so BM25 and
+      embeddings carry the law tokens in every chunk,
+    - a § is never split across chunks unless it alone exceeds
+      MAX_CHUNK_WORDS (then it is sub-split with the heading repeated),
+    - consecutive tiny sections are merged up to target_words.
+    """
+    title_line = f"# {law_title} ({law_abbrev})" if law_abbrev else f"# {law_title}"
+
+    # (text, section_num, standalone) pieces in document order
+    pieces: list[tuple[str, str, bool]] = []
+    for section in sections:
+        header = _section_header(section)
+        body = f"{header}\n\n{section['text']}" if header else section["text"]
+        if len(body.split()) > MAX_CHUNK_WORDS:
+            for i, part in enumerate(chunk_text(section["text"])):
+                part_header = f"{header} (Teil {i + 1})" if header else ""
+                text = f"{part_header}\n\n{part}" if part_header else part
+                pieces.append((text, section["section_num"], True))
+        else:
+            pieces.append((body, section["section_num"], False))
+
+    chunks: list[dict] = []
+    current_texts: list[str] = []
+    current_sections: list[str] = []
+
+    def flush() -> None:
+        nonlocal current_texts, current_sections
+        if current_texts:
+            chunks.append({
+                "text": title_line + "\n\n" + "\n\n".join(current_texts),
+                "sections": [s for s in current_sections if s],
+            })
+            current_texts, current_sections = [], []
+
+    for text, section_num, standalone in pieces:
+        if standalone:
+            flush()
+            current_texts, current_sections = [text], [section_num]
+            flush()
+            continue
+        current_words = sum(len(t.split()) for t in current_texts)
+        if (
+            current_words >= min_words
+            and current_words + len(text.split()) > target_words
+        ):
+            flush()
+        current_texts.append(text)
+        current_sections.append(section_num)
+    flush()
+
+    # A trailing mini-chunk would be dropped by the length filter — merge it
+    # into the previous chunk instead of losing the law's last sections.
+    if (
+        len(chunks) >= 2
+        and len(chunks[-1]["text"].split()) < min_words + len(title_line.split())
+    ):
+        tail = chunks.pop()
+        body = tail["text"].removeprefix(title_line).strip()
+        chunks[-1]["text"] += "\n\n" + body
+        chunks[-1]["sections"].extend(tail["sections"])
+
+    return chunks
+
+
 class GesetzeAdapter(SourceAdapter):
     """Fetches German federal laws from gesetze-im-internet.de."""
 
@@ -188,24 +280,8 @@ class GesetzeAdapter(SourceAdapter):
             law_title = sections[0]["law_title"] if sections else entry["title"]
             slug = re.sub(r"[^a-z0-9]+", "-", law_abbrev.lower()).strip("-") or "gesetz"
 
-            # Assemble full law text with section headings, then chunk
-            full_text = ""
-            for section in sections:
-                header = ""
-                if section["section_num"]:
-                    header = f"## {section['section_num']}"
-                    if section["section_title"]:
-                        header += f" {section['section_title']}"
-                elif section["section_title"]:
-                    header = f"## {section['section_title']}"
-
-                if header:
-                    full_text += header + "\n\n" + section["text"] + "\n\n"
-                else:
-                    full_text += section["text"] + "\n\n"
-
-            title_with_abbrev = f"{law_title} ({law_abbrev})" if law_abbrev else law_title
-            chunks = chunk_text(full_text, title=title_with_abbrev)
+            # §-aligned chunking (see build_section_chunks)
+            chunks = build_section_chunks(sections, law_title, law_abbrev)
 
             for chunk_idx, chunk in enumerate(chunks):
                 doc_id = f"gesetze:{slug}:{chunk_idx}"
@@ -215,10 +291,11 @@ class GesetzeAdapter(SourceAdapter):
                     title=law_title,
                     url=f"https://www.gesetze-im-internet.de/{slug}/",
                     language="de",
-                    text=chunk,
+                    text=chunk["text"],
                     metadata={
                         "law_abbrev": law_abbrev,
                         "chunk_index": chunk_idx,
+                        "sections": chunk["sections"],
                     },
                     timestamp="",
                 )

@@ -51,6 +51,52 @@ def _last_user_message(messages: list[dict]) -> tuple[int, str]:
     return -1, ""
 
 
+def _has_tool_history(messages: list[dict]) -> bool:
+    return any(
+        m.get("role") == "tool" or (m.get("role") == "assistant" and m.get("tool_calls"))
+        for m in messages
+    )
+
+
+def _flatten_tool_history(messages: list[dict]) -> list[dict]:
+    """Rewrite tool traffic as plain text.
+
+    The upstream model (gpt-oss) keeps emitting tool calls whenever the chat
+    template contains tool history — even when the request defines no tools or
+    sets tool_choice="none" — which surfaces as empty-content responses.
+    Flattening assistant tool_calls and tool results into ordinary text
+    reliably produces a text answer, so clients can force a final answer after
+    their tool loop.
+    """
+    flat = []
+    for m in messages:
+        role = m.get("role")
+        if role == "assistant" and m.get("tool_calls"):
+            calls = "; ".join(
+                f"{tc.get('function', {}).get('name', '?')}"
+                f"({(tc.get('function', {}).get('arguments') or '')[:2000]})"
+                for tc in m["tool_calls"]
+            )
+            content = (m.get("content") or "").strip()
+            text = (content + "\n\n" if content else "") + f"[Ausgeführte Tool-Aufrufe: {calls}]"
+            flat.append({"role": "assistant", "content": text})
+        elif role == "tool":
+            flat.append({
+                "role": "user",
+                "content": f"[Tool-Ergebnis {m.get('tool_call_id', '')}]\n{m.get('content') or ''}",
+            })
+        else:
+            flat.append(m)
+    # Without this the model tends to mimic the flattened "[Tool-Aufrufe: ...]"
+    # notation instead of answering; tell it explicitly that research is over.
+    flat.append({
+        "role": "system",
+        "content": "Die Recherche ist abgeschlossen. Antworte jetzt direkt und "
+                   "vollständig als normaler Text; gib keine Tool-Aufrufe aus.",
+    })
+    return flat
+
+
 async def _inject_rag_context(messages: list[dict], rag_context_provider) -> list[dict]:
     """Insert retrieved context as a system message before the last user message.
 
@@ -91,6 +137,18 @@ async def post_chat_completions(
     use_rag = request_body.pop("rag", True)
     if use_rag:
         messages = await _inject_rag_context(messages, rag_context_provider)
+
+    # Text-only turns: either the client explicitly disabled tool calls
+    # (tool_choice="none") or it sent tool history without defining tools.
+    # In both cases the upstream model must not see tool machinery at all,
+    # otherwise it keeps emitting tool calls (see _flatten_tool_history).
+    if request_body.get("tool_choice") == "none" or (
+        not request_body.get("tools") and _has_tool_history(messages)
+    ):
+        messages = _flatten_tool_history(messages)
+        request_body.pop("tools", None)
+        request_body.pop("tool_choice", None)
+
     request_body["messages"] = messages
     # The backend has exactly one configured model; the client's choice is
     # overridden so responses always reflect what actually ran.

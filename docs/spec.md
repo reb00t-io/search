@@ -123,6 +123,16 @@ XML listing one zip per document, each zip containing structured XML.
   `gesetze-im-internet.de/gii-toc.xml`. High-value statutes for tax/law
   research (HGB, AO, EStG, KStG, UStG, BGB, … — `PRIORITY_LAWS`) are ingested
   before the rest of the alphabetical TOC. IDs: `gesetze:{slug}:{chunk}`.
+  Chunking is **§-aligned** (`build_section_chunks`): a § is never split
+  across chunks (unless it alone exceeds the hard max — then it is sub-split
+  with the heading repeated), consecutive tiny §§ merge up to ~300 words,
+  every chunk starts with a `# <law> (<abbrev>)` line, and
+  `metadata.sections` lists the §§ in the chunk. Together with the BM25
+  §-reference tokens ("§ 23" → `par23`, "Art. 14" → `art14` in
+  `indexing/bm25.py:tokenize`, applied symmetrically to documents and
+  queries) this makes §-precise queries like "§ 23 KStG" land on the chunk
+  containing that §. One-time migration after the chunking change:
+  `scripts/reingest_gesetze.py`.
 - **`bmf`** (`ingestion/bmf.py`): BMF-Schreiben (tax administration guidance)
   from `bundesfinanzministerium.de`. The HTML listing is bot-walled, so
   discovery goes through `sitemap.xml`; the PDF URL is derived from each
@@ -425,6 +435,14 @@ server-side tool execution, used by the web UI):
 - `tools` are forwarded to the LLM untouched and tool calls stream back to
   the client — the server never executes tools on this path. Clients call
   `GET /v1/search` directly to implement a search tool.
+- **Text-only turns:** if the request sets `tool_choice: "none"`, or carries
+  tool history (assistant `tool_calls` / `tool` messages) without defining
+  `tools`, the proxy flattens the tool traffic into plain text
+  (`_flatten_tool_history`) and strips `tools`/`tool_choice` before
+  forwarding. The upstream model (gpt-oss) otherwise keeps emitting tool
+  calls whenever its chat template contains tool history — returning empty
+  content — so this is what lets clients force a final text answer after
+  their tool loop.
 - RAG injection (see 4.5) runs per request unless disabled with the
   non-standard body field `"rag": false` (stripped before forwarding).
 - The `model` field is overridden with the backend's configured model.

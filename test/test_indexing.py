@@ -74,3 +74,28 @@ class TestBM25Encoder:
         i1, v1 = enc.encode_document("same text here")
         i2, v2 = enc.encode_document("same text here")
         assert sorted(zip(i1, v1)) == sorted(zip(i2, v2))
+
+
+class TestSectionReferenceTokens:
+    def test_paragraph_sign_becomes_token(self):
+        assert "par23" in tokenize("Der Steuersatz steht in § 23 KStG")
+        assert "kstg" in tokenize("Der Steuersatz steht in § 23 KStG")
+
+    def test_double_paragraph_sign(self):
+        assert "par8a" in tokenize("Hinzurechnung nach §§ 8a GewStG")
+
+    def test_letter_suffix(self):
+        assert "par5b" in tokenize("E-Bilanz nach § 5b EStG")
+
+    def test_artikel(self):
+        assert "art14" in tokenize("Eigentum ist durch Art. 14 GG geschützt")
+        assert "art14" in tokenize("Artikel 14 des Grundgesetzes")
+
+    def test_query_document_symmetry(self):
+        doc_tokens = tokenize("## § 23 Steuersatz\nDie Körperschaftsteuer beträgt 15 Prozent")
+        query_tokens = tokenize("§ 23 KStG Steuersatz")
+        assert "par23" in doc_tokens and "par23" in query_tokens
+
+    def test_bare_digits_still_removed(self):
+        tokens = tokenize("15 Prozent im Jahr 2024")
+        assert "15" not in tokens and "2024" not in tokens

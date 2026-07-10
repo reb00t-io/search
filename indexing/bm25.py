@@ -33,9 +33,22 @@ STOP_WORDS = frozenset(
 )
 
 
+# Legal section references: "§ 23", "§§ 8a" -> token "par23"/"par8a";
+# "Art. 14"/"Artikel 14" -> "art14". Without this, section numbers vanish
+# from BM25 entirely ("§" is not a word character and bare digits are
+# filtered), so §-precise queries like "§ 23 KStG" cannot match.
+# Applied symmetrically to documents and queries via this shared tokenizer.
+# Enumerations ("§§ 8 und 9") only tokenize the first number — acceptable.
+_SECTION_REF_RE = re.compile(r"§§?\s*(\d+[a-z]{0,3})\b")
+_ARTICLE_REF_RE = re.compile(r"\bart(?:ikel|\.)\s*(\d+[a-z]?)\b")
+
+
 def tokenize(text: str) -> list[str]:
     """Tokenize text: lowercase, split on non-alphanumeric, filter stop words and short tokens."""
-    tokens = re.findall(r"\b\w{2,}\b", text.lower())
+    text = text.lower()
+    text = _SECTION_REF_RE.sub(r" par\1 ", text)
+    text = _ARTICLE_REF_RE.sub(r" art\1 ", text)
+    tokens = re.findall(r"\b\w{2,}\b", text)
     return [t for t in tokens if t not in STOP_WORDS and not t.isdigit()]
 
 

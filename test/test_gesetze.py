@@ -89,3 +89,72 @@ class TestTocPriority:
         assert [e["title"] for e in ordered] == [
             "Handelsgesetzbuch", "Abgabenordnung", "A-Verordnung",
         ]
+
+
+class TestBuildSectionChunks:
+    def _sections(self, specs):
+        return [
+            {"section_num": num, "section_title": title, "text": text,
+             "law_title": "Testgesetz", "law_abbrev": "TestG"}
+            for num, title, text in specs
+        ]
+
+    def test_every_chunk_carries_law_title_line(self):
+        from ingestion.gesetze import build_section_chunks
+
+        sections = self._sections([
+            ("§ 1", "Eins", "wort " * 200),
+            ("§ 2", "Zwei", "wort " * 200),
+        ])
+        chunks = build_section_chunks(sections, "Testgesetz", "TestG")
+        assert len(chunks) == 2
+        for chunk in chunks:
+            assert chunk["text"].startswith("# Testgesetz (TestG)")
+
+    def test_section_boundaries_respected(self):
+        """A § never shares a chunk with a following big § (no mid-§ splits)."""
+        from ingestion.gesetze import build_section_chunks
+
+        sections = self._sections([
+            ("§ 22", "", "inhalt " * 250),
+            ("§ 23", "Steuersatz", "Die Körperschaftsteuer beträgt 15 Prozent. " * 40),
+        ])
+        chunks = build_section_chunks(sections, "Testgesetz", "TestG")
+        assert [c["sections"] for c in chunks] == [["§ 22"], ["§ 23"]]
+        assert "## § 23 Steuersatz" in chunks[1]["text"]
+
+    def test_tiny_sections_are_merged(self):
+        from ingestion.gesetze import build_section_chunks
+
+        sections = self._sections([
+            ("§ 1", "", "kurz " * 10),
+            ("§ 2", "", "kurz " * 10),
+            ("§ 3", "", "kurz " * 10),
+        ])
+        chunks = build_section_chunks(sections, "Testgesetz", "TestG")
+        assert len(chunks) == 1
+        assert chunks[0]["sections"] == ["§ 1", "§ 2", "§ 3"]
+
+    def test_oversized_section_is_split_with_repeated_heading(self):
+        from ingestion.chunking import MAX_CHUNK_WORDS
+        from ingestion.gesetze import build_section_chunks
+
+        sections = self._sections([
+            ("§ 3", "Steuerfreie Einnahmen", "einnahme " * (MAX_CHUNK_WORDS * 2 + 100)),
+        ])
+        chunks = build_section_chunks(sections, "Testgesetz", "TestG")
+        assert len(chunks) >= 2
+        assert all("## § 3 Steuerfreie Einnahmen (Teil" in c["text"] for c in chunks)
+        assert all(c["sections"] == ["§ 3"] for c in chunks)
+
+    def test_trailing_tiny_section_merged_into_previous(self):
+        from ingestion.gesetze import build_section_chunks
+
+        sections = self._sections([
+            ("§ 1", "", "inhalt " * 280),
+            ("§ 2", "Inkrafttreten", "Dieses Gesetz tritt in Kraft."),
+        ])
+        chunks = build_section_chunks(sections, "Testgesetz", "TestG")
+        assert len(chunks) == 1
+        assert chunks[0]["sections"] == ["§ 1", "§ 2"]
+        assert chunks[0]["text"].count("# Testgesetz (TestG)") == 1
