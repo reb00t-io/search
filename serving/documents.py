@@ -4,7 +4,8 @@ Search and RAG return chunk text truncated to the payload snippet limit; this
 module resolves a document ID back to the complete markdown from the content
 store, so clients (e.g. the tax-agent) can quote sources verbatim.
 
-IDs are either chunk IDs ("gesetze:estg:3") or base document IDs
+IDs are chunk IDs ("gesetze:estg:3"), §-style IDs ("gesetze:hgb:267a",
+resolved via metadata.sections) or base document IDs
 ("gesetze:estg" — all chunks concatenated in order). Lookup data comes from
 data/filtered/documents.jsonl (the indexed corpus) and is cached in memory;
 the file is reloaded when its size changes (it is append-only, written by the
@@ -76,7 +77,9 @@ class DocumentLookup:
                     len(records), len(chunks_by_base))
 
     def get_records(self, doc_id: str) -> list[dict]:
-        """Records for an exact chunk ID, or all chunks of a base document ID.
+        """Records for an exact chunk ID, all chunks of a base document ID, or
+        a §-style ID ("gesetze:hgb:267a" — the chunk containing § 267a, via the
+        chunks' metadata.sections from §-aligned ingestion).
 
         Returns an empty list if the ID is unknown.
         """
@@ -84,7 +87,29 @@ class DocumentLookup:
         if doc_id in self._records:
             return [self._records[doc_id]]
         chunk_ids = self._chunks_by_base.get(doc_id, [])
-        return [self._records[cid] for cid in chunk_ids]
+        if chunk_ids:
+            return [self._records[cid] for cid in chunk_ids]
+        return self._section_records(doc_id)
+
+    def _section_records(self, doc_id: str) -> list[dict]:
+        """Resolve "gesetze:<slug>:<§-number>" via metadata.sections.
+
+        LLM clients naturally cite laws this way; numeric tails stay chunk
+        indexes, so only non-numeric tails (e.g. "267a", "8b") resolve here.
+        """
+        base, _, tail = doc_id.rpartition(":")
+        if not base or not tail or tail.isdigit():
+            return []
+        # "267a" and "§23"/"§ 23" both resolve; a bare numeric tail ("23")
+        # stays a chunk index for backwards compatibility.
+        wanted = tail.lower().lstrip("§").strip()
+        for chunk_id in self._chunks_by_base.get(base, []):
+            record = self._records[chunk_id]
+            sections = (record.get("metadata") or {}).get("sections") or []
+            for section in sections:
+                if section.lower().lstrip("§").strip() == wanted:
+                    return [record]
+        return []
 
     def read_text(self, records: list[dict]) -> str:
         """Concatenate the content of the given records, skipping missing files."""

@@ -91,3 +91,44 @@ class TestDocumentLookup:
         result = fetch_document(lookup, "gesetze:testg:0", max_chars=1000)
         assert result["text"] == "neue Fassung"
         assert result["chunks"] == 1
+
+
+class TestSectionStyleIds:
+    """§-style doc IDs ("gesetze:hgb:267a") resolve via metadata.sections."""
+
+    def _lookup(self, tmp_path):
+        import json
+        from serving.documents import DocumentLookup
+
+        records = [
+            {"id": "gesetze:hgb:0", "source": "gesetze", "title": "HGB",
+             "content_hash": "h0", "metadata": {"sections": ["§ 266", "§ 267"]}},
+            {"id": "gesetze:hgb:1", "source": "gesetze", "title": "HGB",
+             "content_hash": "h1", "metadata": {"sections": ["§ 267a", "§ 268"]}},
+        ]
+        filtered = tmp_path / "filtered"
+        filtered.mkdir(parents=True, exist_ok=True)
+        (filtered / "documents.jsonl").write_text(
+            "\n".join(json.dumps(r) for r in records) + "\n", "utf-8")
+        return DocumentLookup(tmp_path)
+
+    def test_letter_suffix_section_resolves(self, tmp_path):
+        lookup = self._lookup(tmp_path)
+        records = lookup.get_records("gesetze:hgb:267a")
+        assert len(records) == 1 and records[0]["id"] == "gesetze:hgb:1"
+
+    def test_paragraph_sign_prefix_resolves(self, tmp_path):
+        lookup = self._lookup(tmp_path)
+        records = lookup.get_records("gesetze:hgb:§268")
+        assert len(records) == 1 and records[0]["id"] == "gesetze:hgb:1"
+
+    def test_numeric_tail_stays_chunk_index(self, tmp_path):
+        lookup = self._lookup(tmp_path)
+        records = lookup.get_records("gesetze:hgb:1")
+        assert len(records) == 1 and records[0]["id"] == "gesetze:hgb:1"
+        # chunk 267 does not exist and must NOT resolve as § 267
+        assert lookup.get_records("gesetze:hgb:267") == []
+
+    def test_unknown_section_returns_empty(self, tmp_path):
+        lookup = self._lookup(tmp_path)
+        assert lookup.get_records("gesetze:hgb:999z") == []

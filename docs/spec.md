@@ -413,7 +413,7 @@ shown).
 `GET /v1/doc?id=<doc_id>[&max_chars=N]` (`serving/documents.py`) — returns the
 complete stored markdown for a document, resolving the snippet truncation of
 search/RAG results (payload text is capped at 2000 chars; content files are
-not). Accepts a chunk ID (`gesetze:estg:3`) or a base document ID
+not). Accepts a chunk ID (`gesetze:estg:3`), a §-style ID (`gesetze:hgb:267a`, `gesetze:kstg-1977:§23` — resolved via the chunks' `metadata.sections`; bare numeric tails stay chunk indexes) or a base document ID
 (`gesetze:estg` — all chunks concatenated in order). Response:
 `{id, title, url, source, language, timestamp, chunks, text, truncated}`.
 404 for unknown IDs; `max_chars` defaults to 100k (cap 500k).
