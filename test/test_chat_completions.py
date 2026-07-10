@@ -304,3 +304,113 @@ async def test_tool_loop_requests_stay_untouched(client):
     assert body["tools"] == SEARCH_TOOL_DEF
     assert body["messages"][2]["role"] == "tool"
     assert body["messages"][1]["tool_calls"][0]["id"] == "c1"
+
+
+@pytest.mark.asyncio
+async def test_models_endpoint_lists_configured_model(client):
+    resp = await client.get("/v1/models")
+    assert resp.status_code == 200
+    data = await resp.get_json()
+    assert data["object"] == "list"
+    assert data["data"][0]["id"] == main_module.LLM_MODEL
+    assert "generate" in data["data"][0]["tasks"]
+
+
+# ─── Server-side tool loop ───────────────────────────────────────────────────
+
+
+def mock_upstream_rounds(responses: list[dict], *, capture: list | None = None):
+    """Patch httpx.AsyncClient for multiple sequential non-streaming completions."""
+    response_iter = iter(responses)
+
+    async def _post(url, headers=None, json=None):
+        if capture is not None:
+            capture.append({"url": url, "headers": headers, "body": json})
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.content = __import__("json").dumps(next(response_iter)).encode()
+        resp.headers = {"Content-Type": "application/json"}
+        return resp
+
+    @asynccontextmanager
+    async def _client(*args, **kwargs):
+        client = MagicMock()
+        client.post = _post
+        yield client
+
+    return patch("src.main.httpx.AsyncClient", _client)
+
+
+TOOL_CALL_RESPONSE = {
+    "choices": [{"message": {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [{
+            "id": "call_1",
+            "type": "function",
+            "function": {"name": "web_search", "arguments": "{\"query\": \"HGB 267a\"}"},
+        }],
+    }}],
+}
+
+
+@pytest.mark.asyncio
+async def test_server_tool_loop_executes_tools_and_returns_final_answer(client):
+    from unittest.mock import AsyncMock
+    captured = []
+    final = {"choices": [{"message": {"role": "assistant", "content": "Die Antwort ist B."}}]}
+    execute_tool = AsyncMock(return_value={"results": [{"title": "HGB"}]})
+    with mock_upstream_rounds([TOOL_CALL_RESPONSE, final], capture=captured), \
+         patch("src.streaming.execute_tool_call", execute_tool):
+        resp = await client.post("/v1/chat/completions", json={
+            "messages": [{"role": "user", "content": "Frage?"}], "rag": False,
+        })
+
+    assert resp.status_code == 200
+    assert (await resp.get_json())["choices"][0]["message"]["content"] == "Die Antwort ist B."
+    execute_tool.assert_awaited_once()
+
+    assert len(captured) == 2
+    first, second = captured[0]["body"], captured[1]["body"]
+    assert any(t["function"]["name"] == "web_search" for t in first["tools"])
+    assert second["messages"][-2]["tool_calls"][0]["id"] == "call_1"
+    assert second["messages"][-1]["role"] == "tool"
+
+
+@pytest.mark.asyncio
+async def test_server_tool_loop_final_round_forces_answer_without_tools(client):
+    from unittest.mock import AsyncMock
+    captured = []
+    final = {"choices": [{"message": {"role": "assistant", "content": "Antwort."}}]}
+    execute_tool = AsyncMock(return_value={"results": []})
+    with mock_upstream_rounds([TOOL_CALL_RESPONSE, final], capture=captured), \
+         patch("src.streaming.execute_tool_call", execute_tool), \
+         patch("src.chat_completions.MAX_TOOL_CALL_ROUNDS", 2):
+        resp = await client.post("/v1/chat/completions", json={
+            "messages": [{"role": "user", "content": "Frage?"}], "rag": False,
+        })
+
+    assert resp.status_code == 200
+    assert (await resp.get_json())["choices"][0]["message"]["content"] == "Antwort."
+    assert len(captured) == 2
+    final_body = captured[1]["body"]
+    assert "tools" not in final_body
+    assert final_body["messages"][-1]["role"] == "system"
+    assert "must respond" in final_body["messages"][-1]["content"]
+
+
+@pytest.mark.asyncio
+async def test_client_tools_disable_server_tool_loop(client):
+    """A request defining its own tools gets tool calls relayed, not executed."""
+    captured = []
+    with mock_upstream_rounds([TOOL_CALL_RESPONSE], capture=captured):
+        resp = await client.post("/v1/chat/completions", json={
+            "messages": [{"role": "user", "content": "Frage?"}],
+            "tools": SEARCH_TOOL_DEF,
+            "rag": False,
+        })
+
+    assert resp.status_code == 200
+    assert len(captured) == 1
+    data = await resp.get_json()
+    assert data["choices"][0]["message"]["tool_calls"][0]["id"] == "call_1"

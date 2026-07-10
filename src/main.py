@@ -471,11 +471,30 @@ async def chat_responses():
     )
 
 
+@app.route("/v1/models", methods=["GET"])
+async def models_endpoint():
+    """OpenAI-compatible model listing (unauthenticated, matching upstream proxies).
+
+    Lists the single configured upstream model. `tasks` follows the
+    Privatemode extension so eval harnesses can check model capabilities.
+    """
+    return jsonify({
+        "object": "list",
+        "data": [{
+            "id": LLM_MODEL,
+            "object": "model",
+            "owned_by": "search",
+            "tasks": ["generate", "tool_calling"],
+        }],
+    })
+
+
 @app.route("/v1/chat/completions", methods=["POST"])
 async def chat_completions():
     """Stateless OpenAI-compatible endpoint for agent clients.
 
-    No sessions, no server-side tools — see src/chat_completions.py.
+    No sessions; requests without client-defined tools get a server-side
+    tool loop — see src/chat_completions.py.
     """
     body = await request.get_json(force=True)
     return await post_chat_completions(
@@ -487,6 +506,7 @@ async def chat_completions():
         llm_base_url=LLM_BASE_URL,
         llm_api_key=LLM_API_KEY,
         llm_model=LLM_MODEL,
+        server_tools=get_tools_for_mode(USER_MODE),
     )
 
 

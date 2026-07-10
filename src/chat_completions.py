@@ -4,8 +4,14 @@ For agent clients (e.g. tax-agent) that own their conversation history and
 tool loop. In contrast to /v1/responses (stateful, server-side tools, web UI):
 
 - No sessions: the client sends the full message list every request.
-- No server-side tool execution: `tools` are forwarded to the LLM untouched;
-  tool calls come back to the client, which executes them itself.
+- Client-owned tool loop: if the request defines `tools`, they are forwarded
+  to the LLM untouched; tool calls come back to the client, which executes
+  them itself.
+- Server-side tool loop: if a non-streaming request defines no `tools` (and
+  carries no tool history), the backend offers its own search tools to the
+  upstream LLM, executes tool calls server-side, and returns only the final
+  text answer. This makes plain OpenAI clients (e.g. lm-eval) benefit from
+  agentic search without implementing a tool loop.
 - Optional RAG: unless the request sets `"rag": false`, search results for
   the last user message are injected as a system message directly before it
   (same retrieval as the chat UI). The non-standard `rag` field is stripped
@@ -19,6 +25,11 @@ import logging
 from typing import Any
 
 from quart import Response, jsonify
+
+try:
+    from .streaming import MAX_TOOL_CALL_ROUNDS, execute_backend_tool_round
+except ImportError:
+    from streaming import MAX_TOOL_CALL_ROUNDS, execute_backend_tool_round
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +136,7 @@ async def post_chat_completions(
     llm_base_url: str,
     llm_api_key: str,
     llm_model: str,
+    server_tools: list[dict] | None = None,
 ):
     if _is_unauthorized(api_key, authorization):
         return jsonify({"error": "Unauthorized"}), 401
@@ -135,6 +147,19 @@ async def post_chat_completions(
 
     request_body = dict(body)
     use_rag = request_body.pop("rag", True)
+
+    # Server-side tool loop only for plain Q&A requests: no client tools, no
+    # tool history (clients with their own loop send one or the other), no
+    # explicit opt-out, and non-streaming (the final answer arrives only
+    # after the loop completes).
+    use_server_tools = bool(
+        server_tools
+        and not request_body.get("stream")
+        and not request_body.get("tools")
+        and request_body.get("tool_choice") != "none"
+        and not _has_tool_history(messages)
+    )
+
     if use_rag:
         messages = await _inject_rag_context(messages, rag_context_provider)
 
@@ -168,16 +193,50 @@ async def post_chat_completions(
         )
 
     async with client_factory(timeout=UPSTREAM_TIMEOUT_SECONDS) as client:
-        try:
-            resp = await client.post(url, headers=headers, json=request_body)
-        except Exception as exc:
-            logger.warning("Upstream LLM request failed: %s", exc)
-            return jsonify({"error": f"Upstream LLM request failed: {exc}"}), 502
-        return Response(
-            resp.content,
-            status=resp.status_code,
-            content_type=resp.headers.get("Content-Type", "application/json"),
-        )
+        for round_index in range(MAX_TOOL_CALL_ROUNDS if use_server_tools else 1):
+            final_round = round_index == MAX_TOOL_CALL_ROUNDS - 1
+            if use_server_tools:
+                if final_round:
+                    messages.append({
+                        "role": "system",
+                        "content": (
+                            f"Tool-calling stopped after {MAX_TOOL_CALL_ROUNDS} rounds to prevent "
+                            "infinite loops. Tools are no longer available. You must respond to "
+                            "the user now with the information already gathered."
+                        ),
+                    })
+                    request_body.pop("tools", None)
+                else:
+                    request_body["tools"] = server_tools
+                request_body["messages"] = messages
+
+            try:
+                resp = await client.post(url, headers=headers, json=request_body)
+            except Exception as exc:
+                logger.warning("Upstream LLM request failed: %s", exc)
+                return jsonify({"error": f"Upstream LLM request failed: {exc}"}), 502
+
+            tool_calls = None
+            if use_server_tools and resp.status_code == 200:
+                try:
+                    data = json.loads(resp.content)
+                    assistant_message = (data.get("choices") or [{}])[0].get("message") or {}
+                    tool_calls = assistant_message.get("tool_calls")
+                except Exception:
+                    logger.exception("Failed to parse upstream response for tool calls; relaying as-is")
+
+            if not tool_calls:
+                return Response(
+                    resp.content,
+                    status=resp.status_code,
+                    content_type=resp.headers.get("Content-Type", "application/json"),
+                )
+
+            messages.append(assistant_message)
+            await execute_backend_tool_round(messages, tool_calls)
+
+    # Unreachable unless the model emits tool calls without tools offered.
+    return jsonify({"error": "Tool loop ended without a final answer"}), 502
 
 
 async def _relay_stream(request_body: dict, url: str, headers: dict, client_factory):

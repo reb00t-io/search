@@ -432,9 +432,15 @@ server-side tool execution, used by the web UI):
 
 - The client sends the full message list every request; nothing is stored in
   sessions.
-- `tools` are forwarded to the LLM untouched and tool calls stream back to
-  the client — the server never executes tools on this path. Clients call
-  `GET /v1/search` directly to implement a search tool.
+- If the request defines `tools`, they are forwarded to the LLM untouched and
+  tool calls stream back to the client — the server does not execute tools.
+  Clients call `GET /v1/search` directly to implement a search tool.
+- **Server-side tool loop:** a non-streaming request *without* `tools` (and
+  without tool history or `tool_choice: "none"`) gets the backend's user-mode
+  tools offered to the upstream LLM; tool calls are executed server-side
+  (up to `MAX_TOOL_CALL_ROUNDS`, final round forces a text answer with tools
+  withheld) and only the final completion is returned. This lets plain
+  OpenAI clients (e.g. lm-eval benchmarks) benefit from agentic search.
 - **Text-only turns:** if the request sets `tool_choice: "none"`, or carries
   tool history (assistant `tool_calls` / `tool` messages) without defining
   `tools`, the proxy flattens the tool traffic into plain text
@@ -449,6 +455,11 @@ server-side tool execution, used by the web UI):
 - Streaming (`"stream": true`) relays the upstream SSE bytes verbatim;
   non-streaming returns the upstream JSON with its status code.
 - Auth: same `Authorization: Bearer <API_KEY>` as the other endpoints.
+
+`GET /v1/models` (`src/main.py`) — unauthenticated OpenAI-compatible model
+listing with the single configured upstream model; `tasks` follows the
+Privatemode extension (`["generate", "tool_calling"]`) so eval harnesses can
+check capabilities before running.
 
 ---
 
