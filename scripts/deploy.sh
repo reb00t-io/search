@@ -154,6 +154,7 @@ printf "==> writing remote .env..."
 printf -v port_q '%q' "$PORT"
 printf -v llm_base_url_q '%q' "$LLM_BASE_URL"
 printf -v llm_api_key_q '%q' "$LLM_API_KEY"
+printf -v llm_model_q '%q' "${LLM_MODEL:-kimi-latest}"
 printf -v api_key_q '%q' "$API_KEY"
 printf -v auth_password_q '%q' "$AUTH_PASSWORD"
 
@@ -174,6 +175,7 @@ cat > ~/search/.env <<'ENVEOF'
 PORT=$port_q
 LLM_BASE_URL=$llm_base_url_q
 LLM_API_KEY=$llm_api_key_q
+LLM_MODEL=$llm_model_q
 API_KEY=$api_key_q
 AUTH_MODE=password
 AUTH_PASSWORD=$auth_password_q

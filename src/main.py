@@ -212,7 +212,7 @@ DEPLOY_DATE = os.environ.get("DEPLOY_DATE", "unknown")
 # LLM backend connection
 LLM_BASE_URL = os.environ["LLM_BASE_URL"]
 LLM_API_KEY  = os.environ.get("LLM_API_KEY", "")
-LLM_MODEL    = os.environ.get("LLM_MODEL", "gpt-oss-120b")
+LLM_MODEL    = os.environ.get("LLM_MODEL", "kimi-latest")
 STREAM_PACE_SECONDS = float(os.environ.get("STREAM_PACE_SECONDS", "0.003"))
 
 # Client auth — if unset, auth is skipped (useful in local dev)

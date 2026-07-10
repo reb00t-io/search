@@ -61,7 +61,7 @@ def _has_tool_history(messages: list[dict]) -> bool:
 def _flatten_tool_history(messages: list[dict]) -> list[dict]:
     """Rewrite tool traffic as plain text.
 
-    The upstream model (gpt-oss) keeps emitting tool calls whenever the chat
+    Some upstream models (observed with gpt-oss) keep emitting tool calls whenever the chat
     template contains tool history — even when the request defines no tools or
     sets tool_choice="none" — which surfaces as empty-content responses.
     Flattening assistant tool_calls and tool results into ordinary text
