@@ -58,13 +58,19 @@ WEB_SEARCH_TOOL = {
     "type": "function",
     "function": {
         "name": "web_search",
-        "description": "Search the web for current information and return concise results with URLs.",
+        "description": (
+            "Search a curated index of trusted sources (German laws, court rulings, "
+            "Wikipedia, medical, news) and return concise results with URLs. "
+            "Most content is German: phrase queries in German where possible and "
+            "translate foreign legal concepts into German terms. This is not a web "
+            "search engine — operators like site: or quoted phrases have no effect."
+        ),
         "parameters": {
             "type": "object",
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "The search query.",
+                    "description": "Plain keyword query, preferably in German.",
                 },
                 "max_results": {
                     "type": "integer",
