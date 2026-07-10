@@ -361,6 +361,41 @@ async def test_tool_call_round_executes_backend_tool_and_continues_stream(client
     assert sessions[sid][-1] == {"role": "assistant", "content": "The result is 1."}
 
 
+async def test_final_tool_round_forces_answer_without_tools(client):
+    tool_round = [
+        b'data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n',
+        (
+            b'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function",'
+            b'"function":{"name":"python","arguments":"{\\"code\\": \\\"print(1)\\\"}"}}]},'
+            b'"finish_reason":"tool_calls"}]}\n\n'
+        ),
+        b'data: [DONE]\n\n',
+    ]
+    rounds = [tool_round, _sse("Final answer.")]
+
+    execute_tool = AsyncMock(return_value={"stdout": "1\n", "stderr": "", "exit_code": 0})
+    request_bodies: list[dict] = []
+    with (
+        mock_llm_rounds(rounds, capture_bodies=request_bodies),
+        patch("src.streaming.execute_tool_call", execute_tool),
+        patch("src.streaming.MAX_TOOL_CALL_ROUNDS", 2),
+    ):
+        resp = await client.post("/v1/responses", json={"prompt": "run python"})
+        body = await resp.get_data()
+
+    assert resp.status_code == 200
+    text = body.decode()
+    assert text.count("data: [DONE]") == 1
+    assert len(request_bodies) == 2
+    assert request_bodies[0]["tools"]
+    assert "tools" not in request_bodies[1]
+    final_instruction = request_bodies[1]["messages"][-1]
+    assert final_instruction["role"] == "system"
+    assert "must respond" in final_instruction["content"]
+    sid = resp.headers.get("X-Session-Id")
+    assert sessions[sid][-1] == {"role": "assistant", "content": "Final answer."}
+
+
 async def test_user_mode_excludes_bash_tool(client):
     request_bodies: list[dict] = []
     with mock_llm_rounds([_sse("ok")], capture_bodies=request_bodies), patch("src.main._load_system_prompt", side_effect=lambda mode: f"prompt:{mode}"):

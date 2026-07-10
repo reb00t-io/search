@@ -16,7 +16,7 @@ try:
 except ImportError:
     from tool_executor import execute_tool_call
 
-MAX_TOOL_CALL_ROUNDS = 20
+MAX_TOOL_CALL_ROUNDS = 30
 
 logger = logging.getLogger(__name__)
 
@@ -214,11 +214,22 @@ async def generate_stream(
     try:
         async with client_factory(timeout=120) as client:
             for round_index in range(MAX_TOOL_CALL_ROUNDS):
+                final_round = round_index == MAX_TOOL_CALL_ROUNDS - 1
+                if final_round:
+                    messages.append({
+                        "role": "system",
+                        "content": (
+                            f"Tool-calling stopped after {MAX_TOOL_CALL_ROUNDS} rounds to prevent infinite loops. "
+                            "Tools are no longer available. You must respond to the user now "
+                            "with the information already gathered."
+                        ),
+                    })
                 state = StreamState(stream_pace_seconds=stream_pace_seconds)
                 decoder = codecs.getincrementaldecoder("utf-8")()
                 request_body = dict(llm_body)
                 request_body["messages"] = messages
-                request_body["tools"] = tools
+                if not final_round:
+                    request_body["tools"] = tools
 
                 async with client.stream(
                     "POST",
@@ -276,15 +287,8 @@ async def generate_stream(
                     yield emit_event("[DONE]")
                     return
 
-                if round_index == MAX_TOOL_CALL_ROUNDS - 1:
-                    error_text = (
-                        f"Tool-calling stopped after {MAX_TOOL_CALL_ROUNDS} rounds to prevent infinite loops. "
-                        "Please answer with the information already gathered."
-                    )
-                    messages.append({"role": "assistant", "content": error_text})
-                    yield emit_event(json.dumps({"choices": [{"delta": {"content": error_text}}]}, separators=(",", ":")))
-                    yield emit_event("[DONE]")
-                    return
+            # Unreachable unless the model emits tool calls without tools offered.
+            yield emit_event("[DONE]")
     finally:
         save_sessions()
 
