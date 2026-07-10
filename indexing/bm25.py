@@ -69,18 +69,34 @@ class BM25Encoder:
             self._next_id += 1
         return self.vocab[token]
 
+    # BM25-style term-frequency saturation: tf/(tf + K1) caps the weight of
+    # repeated terms near 1.0, so a chunk that merely CITES "§ 23" twenty
+    # times cannot outrank the chunk that IS § 23.
+    K1 = 1.2
+    # Tokens appearing in markdown headings (law title, "## § 23 Steuersatz")
+    # identify what a chunk is about — boost them past any citation noise.
+    HEADING_BONUS = 1.0
+
     def encode_document(self, text: str) -> tuple[list[int], list[float]]:
         """Encode a document into sparse vector (indices, values).
 
-        Values are log(1 + tf) to dampen high-frequency terms.
+        Values are saturated term frequencies (tf/(tf+K1)) plus a bonus for
+        tokens that occur in markdown headings.
         """
         tokens = tokenize(text)
         tf = Counter(tokens)
+        heading_lines = "\n".join(
+            line for line in text.splitlines() if line.lstrip().startswith("#")
+        )
+        heading_tokens = set(tokenize(heading_lines))
         indices = []
         values = []
         for token, count in tf.items():
+            weight = count / (count + self.K1)
+            if token in heading_tokens:
+                weight += self.HEADING_BONUS
             indices.append(self._get_token_id(token))
-            values.append(math.log1p(count))
+            values.append(weight)
         return indices, values
 
     def encode_query(self, text: str) -> tuple[list[int], list[float]]:

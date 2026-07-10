@@ -99,3 +99,21 @@ class TestSectionReferenceTokens:
     def test_bare_digits_still_removed(self):
         tokens = tokenize("15 Prozent im Jahr 2024")
         assert "15" not in tokens and "2024" not in tokens
+
+
+class TestWeighting:
+    def test_tf_saturation_caps_repeated_terms(self):
+        enc = BM25Encoder()
+        _, low = enc.encode_document("par23")
+        _, high = enc.encode_document(" ".join(["par23"] * 30))
+        # 30 repetitions must not give anywhere near 30x the weight
+        assert high[0] < low[0] * 2.2
+
+    def test_heading_tokens_boosted(self):
+        enc = BM25Encoder()
+        section_chunk = "# Körperschaftsteuergesetz (KStG)\n\n## § 23 Steuersatz\n\nDie Steuer beträgt 15 Prozent."
+        citing_chunk = "Nach § 23 gilt etwas. " * 20
+        def weight(text, token):
+            indices, values = enc.encode_document(text)
+            return dict(zip(indices, values)).get(enc.vocab[token], 0.0)
+        assert weight(section_chunk, "par23") > weight(citing_chunk, "par23")
