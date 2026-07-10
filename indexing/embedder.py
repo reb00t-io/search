@@ -41,25 +41,18 @@ def _truncate(text: str) -> str:
 
 def _call_embeddings(inputs: list[str]) -> list[list[float]]:
     """Call the embeddings API. Returns vectors in input order."""
-    client = _get_client()
     truncated = [_truncate(t) for t in inputs]
     try:
-        resp = client.post(
-            "/embeddings",
-            json={
-                "model": MODEL,
-                "input": truncated,
-                "dimensions": DIMENSIONS,
-                "encoding_format": "float",
-            },
-        )
-        resp.raise_for_status()
+        resp = _post_with_backoff(truncated)
     except httpx.HTTPStatusError as e:
-        # If batch fails, try one-by-one to isolate the bad input
-        if len(truncated) > 1:
+        # A non-retryable 4xx on a batch usually means one bad input —
+        # isolate it one-by-one. Rate limits (429) never reach this branch:
+        # they are retried with backoff and raise only when exhausted, so a
+        # throttled API can never degrade into 32x more single requests.
+        if len(truncated) > 1 and e.response.status_code not in RETRY_STATUS:
             logger.warning("Batch embedding failed (%s), retrying one-by-one", e.response.status_code)
             return _embed_one_by_one(truncated)
-        logger.error("Embedding failed for text (len=%d): %s", len(truncated[0]), e)
+        logger.error("Embedding failed (%d texts): %s", len(truncated), e)
         raise
 
     data = resp.json()["data"]
@@ -67,25 +60,70 @@ def _call_embeddings(inputs: list[str]) -> list[list[float]]:
     return [d["embedding"] for d in data]
 
 
-def _embed_one_by_one(texts: list[str]) -> list[list[float]]:
-    """Fallback: embed texts individually, using zero vector for failures."""
+# Retryable statuses: rate limit + transient upstream errors.
+RETRY_STATUS = frozenset({429, 500, 502, 503, 504})
+MAX_RETRIES = 8
+MAX_BACKOFF_SECONDS = 60.0
+
+
+def _post_with_backoff(inputs: list[str]) -> httpx.Response:
+    """POST /embeddings, retrying 429/5xx with exponential backoff.
+
+    Honors the Retry-After header when the API sends one, otherwise doubles
+    the wait (1s, 2s, ... capped at 60s). Raises after MAX_RETRIES so the
+    indexing loop stops loudly instead of writing bad vectors.
+    """
+    import time
+
     client = _get_client()
+    payload = {
+        "model": MODEL,
+        "input": inputs,
+        "dimensions": DIMENSIONS,
+        "encoding_format": "float",
+    }
+    backoff = 1.0
+    last_exc: Exception | None = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            resp = client.post("/embeddings", json=payload)
+            if resp.status_code not in RETRY_STATUS:
+                resp.raise_for_status()
+                return resp
+            retry_after = resp.headers.get("Retry-After")
+            wait = float(retry_after) if retry_after and retry_after.isdigit() else backoff
+            wait = min(wait, MAX_BACKOFF_SECONDS)
+            logger.info("Embeddings API returned %d, retrying in %.0fs (attempt %d/%d)",
+                        resp.status_code, wait, attempt, MAX_RETRIES)
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code not in RETRY_STATUS:
+                raise
+            last_exc = e
+        except httpx.TransportError as e:
+            wait = min(backoff, MAX_BACKOFF_SECONDS)
+            logger.info("Embeddings API transport error (%s), retrying in %.0fs (attempt %d/%d)",
+                        e, wait, attempt, MAX_RETRIES)
+            last_exc = e
+        if attempt < MAX_RETRIES:
+            time.sleep(wait)
+            backoff = min(backoff * 2, MAX_BACKOFF_SECONDS)
+    raise last_exc  # type: ignore[misc]
+
+
+def _embed_one_by_one(texts: list[str]) -> list[list[float]]:
+    """Fallback for a failed batch: embed texts individually to isolate bad
+    inputs. Only genuinely bad inputs (non-retryable 4xx) are skipped with a
+    zero vector; rate limits and transient errors keep retrying/raise."""
     results = []
     for text in texts:
         try:
-            resp = client.post(
-                "/embeddings",
-                json={
-                    "model": MODEL,
-                    "input": [text],
-                    "dimensions": DIMENSIONS,
-                    "encoding_format": "float",
-                },
-            )
-            resp.raise_for_status()
+            resp = _post_with_backoff([text])
             results.append(resp.json()["data"][0]["embedding"])
-        except Exception as e:
-            logger.warning("Skipping text (len=%d): %s", len(text), e)
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code in RETRY_STATUS:
+                raise  # exhausted retries on a transient error — stop loudly
+            logger.warning("Skipping bad input (len=%d): %s", len(text), e)
             results.append([0.0] * DIMENSIONS)
     return results
 
